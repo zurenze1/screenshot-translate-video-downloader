@@ -1,0 +1,8 @@
+{
+  "name": "screenshot-translate-video-downloader-presentation",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "check:presentation": "node scripts/check-presentation.cjs"
+  }
+}
