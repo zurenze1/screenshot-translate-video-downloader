@@ -7,17 +7,25 @@ import AVFoundation
 // MARK: - 水印框（比例坐标，跟着画面缩放）
 
 final class MarqueeView: NSView {
-    var selecting = false { didSet { needsDisplay = true; window?.invalidateCursorRects(for: self) } }
-    /// 水印框，0~1 比例，原点在画面左上
+    enum Kind { case watermark, subtitle }
+    /// 正在框选什么；nil = 没在框选，鼠标穿透给播放器
+    var selecting: Kind? { didSet { needsDisplay = true; window?.invalidateCursorRects(for: self); onSelectingChanged?() } }
+    /// 水印框（可以多个），0~1 比例，原点在画面左上
     var fracRects: [CGRect] = [] { didSet { needsDisplay = true } }
+    /// 字幕框（只有一个）
+    var subRect: CGRect? { didSet { needsDisplay = true } }
+    var showSubtitle = false { didSet { needsDisplay = true } }
     /// 画面在本视图里实际显示的区域
     var videoBounds: () -> CGRect = { .zero }
     var onAdd: ((CGRect) -> Void)?
+    var onRemove: ((Int) -> Void)?
+    var onSubtitle: ((CGRect) -> Void)?
+    var onSelectingChanged: (() -> Void)?
     private var start: CGPoint?
     private var dragging: CGRect?
 
-    override func hitTest(_ p: NSPoint) -> NSView? { selecting ? super.hitTest(p) : nil }
-    override func resetCursorRects() { if selecting { addCursorRect(bounds, cursor: .crosshair) } }
+    override func hitTest(_ p: NSPoint) -> NSView? { selecting != nil ? super.hitTest(p) : nil }
+    override func resetCursorRects() { if selecting != nil { addCursorRect(bounds, cursor: .crosshair) } }
     override func setFrameSize(_ s: NSSize) { super.setFrameSize(s); needsDisplay = true }
 
     private func toView(_ f: CGRect) -> CGRect {
@@ -35,7 +43,7 @@ final class MarqueeView: NSView {
                       width: c.width / vb.width, height: c.height / vb.height)
     }
 
-    override func mouseDown(with e: NSEvent) { start = convert(e.locationInWindow, from: nil) }
+    override func mouseDown(with e: NSEvent) { start = convert(e.locationInWindow, from: nil); dragging = nil }
     override func mouseDragged(with e: NSEvent) {
         guard let s = start else { return }
         let p = convert(e.locationInWindow, from: nil)
@@ -43,28 +51,56 @@ final class MarqueeView: NSView {
         needsDisplay = true
     }
     override func mouseUp(with e: NSEvent) {
-        if let r = dragging, let f = toFrac(r) { onAdd?(f) }
-        start = nil; dragging = nil
-        selecting = false
+        defer { start = nil; dragging = nil; needsDisplay = true }
+        let p = convert(e.locationInWindow, from: nil)
+        if let r = dragging, r.width > 4, r.height > 4, let f = toFrac(r) {
+            if selecting == .subtitle { onSubtitle?(f); selecting = nil }
+            else { onAdd?(f) }          // 水印：框完一个接着框下一个
+            return
+        }
+        // 只是点了一下：点在某个水印框上就删掉它
+        if selecting == .watermark, let i = fracRects.lastIndex(where: { toView($0).contains(p) }) { onRemove?(i) }
+    }
+
+    private func label(_ text: String, at r: CGRect, color: NSColor) {
+        let a: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white]
+        let t = text as NSString
+        let sz = t.size(withAttributes: a)
+        let bg = NSRect(x: r.minX, y: r.maxY, width: sz.width + 8, height: sz.height + 2)
+        color.setFill(); NSBezierPath(roundedRect: bg, xRadius: 3, yRadius: 3).fill()
+        t.draw(at: NSPoint(x: bg.minX + 4, y: bg.minY + 1), withAttributes: a)
+    }
+
+    private func box(_ r: CGRect, _ color: NSColor) {
+        color.withAlphaComponent(0.22).setFill()
+        r.fill()
+        let p = NSBezierPath(rect: r)
+        p.lineWidth = 2
+        p.setLineDash([6, 4], count: 2, phase: 0)
+        color.setStroke()
+        p.stroke()
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        if selecting {
+        if let k = selecting {
             NSColor(white: 0, alpha: 0.25).setFill(); bounds.fill()
-            let s = "按住鼠标拖出一个框，盖住水印（可以框好几个）" as NSString
-            let a: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: NSColor.white]
+            let s = (k == .watermark ? "拖出框盖住水印，可以连续框好几个；单击某个框删掉它；按 Esc 或「完成框选」结束"
+                                     : "拖出一个框盖住字幕那一条") as NSString
+            let a: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: NSColor.white]
             let sz = s.size(withAttributes: a)
-            s.draw(at: NSPoint(x: bounds.midX - sz.width / 2, y: bounds.maxY - sz.height - 16), withAttributes: a)
+            s.draw(at: NSPoint(x: bounds.midX - sz.width / 2, y: bounds.maxY - sz.height - 14), withAttributes: a)
         }
-        for r in fracRects.map(toView) + (dragging.map { [$0] } ?? []) {
-            NSColor.systemRed.withAlphaComponent(0.22).setFill()
-            r.fill()
-            let p = NSBezierPath(rect: r)
-            p.lineWidth = 2
-            p.setLineDash([6, 4], count: 2, phase: 0)
-            NSColor.systemRed.setStroke()
-            p.stroke()
+        for (i, f) in fracRects.enumerated() {
+            let r = toView(f)
+            box(r, .systemRed)
+            label("水印 \(i + 1)", at: r, color: .systemRed)
         }
+        if showSubtitle, let f = subRect {
+            let r = toView(f)
+            box(r, .systemYellow)
+            label("字幕", at: r, color: .systemOrange)
+        }
+        if let d = dragging { box(d, selecting == .subtitle ? .systemYellow : .systemRed) }
     }
 }
 
@@ -274,6 +310,8 @@ final class ClipEditor: NSObject, NSWindowDelegate {
     private let lengthLabel = NSTextField(labelWithString: "")
     private let format = NSPopUpButton(frame: .zero, pullsDown: false)
     private let eraseCheck = NSButton(checkboxWithTitle: "抹掉框里的水印", target: nil, action: nil)
+    private let marqueeButton = NSButton(title: "框选水印", target: nil, action: nil)
+    private let subPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let audioCheck = NSButton(checkboxWithTitle: "保留声音", target: nil, action: nil)
     private let exportButton = NSButton(title: "导出片段", target: nil, action: nil)
     private let undoButton = NSButton(title: "↶ 撤销", target: nil, action: nil)
@@ -295,7 +333,7 @@ final class ClipEditor: NSObject, NSWindowDelegate {
     private var exporting: Process?
 
     // 撤销
-    private struct Snap { let start: Double, end: Double, rects: [CGRect], erase: Bool }
+    private struct Snap { let start: Double, end: Double, rects: [CGRect], erase: Bool, sub: CGRect?, subMode: Int }
     private enum UndoItem { case edit(Snap), exported(URL) }
     private var undoStack: [UndoItem] = []
 
@@ -314,6 +352,7 @@ final class ClipEditor: NSObject, NSWindowDelegate {
             let editing = self.window.firstResponder is NSTextView
             let key = e.charactersIgnoringModifiers?.lowercased()
             if e.modifierFlags.contains(.command) && key == "z" && !editing { self.undo(); return nil }
+            if e.keyCode == 53, self.marquee.selecting != nil { self.marquee.selecting = nil; return nil }   // Esc 结束框选
             guard self.hasVideo, !editing, !e.modifierFlags.contains(.command) else { return e }
             switch key {
             case "i": self.markStart(); return nil
@@ -360,6 +399,24 @@ final class ClipEditor: NSObject, NSWindowDelegate {
             self.eraseCheck.state = .on
             self.refresh()
         }
+        marquee.onRemove = { [weak self] i in
+            guard let self = self, i < self.marquee.fracRects.count else { return }
+            self.pushEdit()
+            self.marquee.fracRects.remove(at: i)
+            if self.marquee.fracRects.isEmpty { self.eraseCheck.state = .off }
+            self.refresh()
+        }
+        marquee.onSubtitle = { [weak self] f in
+            guard let self = self else { return }
+            self.pushEdit()
+            self.marquee.subRect = f
+            if self.subPopup.indexOfSelectedItem == 0 { self.subPopup.selectItem(at: 1) }
+            self.refresh()
+        }
+        marquee.onSelectingChanged = { [weak self] in
+            guard let self = self else { return }
+            self.marqueeButton.title = self.marquee.selecting == .watermark ? "✓ 完成框选" : "框选水印"
+        }
         stage.addSubview(marquee)
         hint.stringValue = "看到好看的动效，只想要其中几秒？\n\n1. 上面粘贴视频链接回车 —— 在线预览，不会下载整个视频\n2. 播放到开始的地方按「设为起点」（键盘 I），到结束的地方按「设为终点」（O）\n3. 有水印点「自动找水印」，或「框选水印」自己框\n4. 点「导出片段」—— 只下载这几秒，原画质，水印同时抹掉\n\n点错了随时按「撤销」（⌘Z），导出的文件也能撤销"
         hint.textColor = NSColor(white: 0.85, alpha: 1)
@@ -398,8 +455,14 @@ final class ClipEditor: NSObject, NSWindowDelegate {
 
         eraseCheck.target = self; eraseCheck.action = #selector(eraseToggled)
         audioCheck.state = .on
-        let row2 = NSStackView(views: [button("自动找水印", #selector(autoDetect)), button("框选水印", #selector(beginMarquee)),
-                                       button("清除框", #selector(clearMarquee)), eraseCheck, flex(), audioCheck])
+        marqueeButton.bezelStyle = .rounded
+        marqueeButton.target = self; marqueeButton.action = #selector(beginMarquee)
+        subPopup.addItems(withTitles: ["保留字幕", "抹掉字幕（用周围画面填平）", "裁掉字幕那一条（画面变矮）"])
+        subPopup.target = self; subPopup.action = #selector(subModeChanged)
+        subPopup.toolTip = "想要字幕就选「保留」；不想要就选「抹掉」或「裁掉」，会自动找字幕位置（黄框），不准可以点「框选字幕」自己框"
+        let row2 = NSStackView(views: [button("自动找水印", #selector(autoDetect)), marqueeButton,
+                                       button("清除水印框", #selector(clearMarquee)), eraseCheck, flex(),
+                                       subPopup, button("框选字幕", #selector(beginSubtitleMarquee)), audioCheck])
 
         format.addItems(withTitles: ["精确到帧 · 接近无损（H.264 MP4，推荐）",
                                      "原画质无损 · 极快（直接拷贝，起点对齐到最近的关键帧）",
@@ -462,6 +525,8 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         stopPlayback()
         hint.isHidden = true
         marquee.fracRects = []
+        marquee.subRect = nil
+        marquee.selecting = nil
         eraseCheck.state = .off
         undoStack.removeAll { if case .edit = $0 { return true } else { return false } }
     }
@@ -577,7 +642,10 @@ final class ClipEditor: NSObject, NSWindowDelegate {
 
     // MARK: 撤销
 
-    private func snap() -> Snap { Snap(start: startT, end: endT, rects: marquee.fracRects, erase: eraseCheck.state == .on) }
+    private func snap() -> Snap {
+        Snap(start: startT, end: endT, rects: marquee.fracRects, erase: eraseCheck.state == .on,
+             sub: marquee.subRect, subMode: subPopup.indexOfSelectedItem)
+    }
 
     /// 每次改动之前记一下，方便撤销
     private func pushEdit() {
@@ -594,6 +662,8 @@ final class ClipEditor: NSObject, NSWindowDelegate {
             startT = s.start; endT = s.end
             marquee.fracRects = s.rects
             eraseCheck.state = s.erase ? .on : .off
+            marquee.subRect = s.sub
+            subPopup.selectItem(at: s.subMode)
             status.stringValue = "已撤销"
         case .exported(let u):
             if FileManager.default.fileExists(atPath: u.path) {
@@ -658,22 +728,68 @@ final class ClipEditor: NSObject, NSWindowDelegate {
 
     // MARK: 水印
 
+    /// 框选水印：再点一次（或按 Esc）结束
     @objc private func beginMarquee() {
         guard hasVideo else { return }
+        if marquee.selecting == .watermark { marquee.selecting = nil; return }
         playerView.player?.pause()
-        marquee.selecting = true
+        marquee.selecting = .watermark
+    }
+
+    @objc private func beginSubtitleMarquee() {
+        guard hasVideo else { return }
+        playerView.player?.pause()
+        marquee.showSubtitle = true
+        marquee.selecting = .subtitle
+    }
+
+    /// 选了「抹掉 / 裁掉字幕」：还没有字幕框就自动找
+    @objc private func subModeChanged() {
+        let newMode = subPopup.indexOfSelectedItem
+        undoStack.append(.edit(Snap(start: startT, end: endT, rects: marquee.fracRects, erase: eraseCheck.state == .on,
+                                    sub: marquee.subRect, subMode: lastSubMode)))
+        lastSubMode = newMode
+        if newMode != 0 && marquee.subRect == nil { detectSubtitle() }
+        refresh()
+    }
+    private var lastSubMode = 0
+
+    private func sampleFrames() async -> [CGImage] {
+        if let r = remote { return await Watermark.sampleFrames(url: r.direct ?? r.preview, headers: r.headers, duration: duration) }
+        guard let s = source else { return [] }
+        var f = await Watermark.sampleFrames(AVURLAsset(url: s), duration: duration)
+        if f.count < 4 { f = await Watermark.sampleFrames(url: s, headers: [:], duration: duration) }
+        return f
+    }
+
+    private func detectSubtitle() {
+        guard hasVideo, duration > 1 else { return }
+        status.stringValue = "正在找字幕位置…"
+        Task { @MainActor in
+            let frames = await self.sampleFrames()
+            let r = await Task.detached { Subtitle.detect(frames: frames) }.value
+            if let r = r {
+                self.marquee.subRect = r
+                self.status.stringValue = "字幕位置已用黄框标出。不准的话点「框选字幕」自己框"
+            } else {
+                self.status.stringValue = "没找到字幕。如果有，点「框选字幕」自己框一下"
+            }
+            self.refresh()
+        }
     }
 
     @objc private func clearMarquee() {
         guard !marquee.fracRects.isEmpty else { return }
         pushEdit()
         marquee.fracRects = []
+        marquee.selecting = nil
         eraseCheck.state = .off
         refresh()
     }
 
     @objc private func eraseToggled() {
-        undoStack.append(.edit(Snap(start: startT, end: endT, rects: marquee.fracRects, erase: eraseCheck.state != .on)))
+        undoStack.append(.edit(Snap(start: startT, end: endT, rects: marquee.fracRects, erase: eraseCheck.state != .on,
+                                    sub: marquee.subRect, subMode: subPopup.indexOfSelectedItem)))
         refresh()
     }
 
@@ -681,24 +797,18 @@ final class ClipEditor: NSObject, NSWindowDelegate {
     @objc private func autoDetect() {
         guard hasVideo, duration > 1 else { return }
         status.stringValue = "正在找水印…"
-        let remote = self.remote, dur = duration, source = self.source
         Task { @MainActor in
-            var frames: [CGImage] = []
-            if let r = remote {
-                frames = await Watermark.sampleFrames(url: r.direct ?? r.preview, headers: r.headers, duration: dur)
-            } else if let s = source {
-                frames = await Watermark.sampleFrames(AVURLAsset(url: s), duration: dur)
-                if frames.count < 4 { frames = await Watermark.sampleFrames(url: s, headers: [:], duration: dur) }
-            }
+            let frames = await self.sampleFrames()
             let rects = await Task.detached { Watermark.detect(frames: frames) }.value
             if rects.isEmpty {
                 self.status.stringValue = "没找到固定位置的水印。如果有，用「框选水印」自己框一下"
                 return
             }
             self.pushEdit()
-            self.marquee.fracRects = rects
+            // 和已经框好的合在一起，不覆盖自己框的
+            self.marquee.fracRects += rects.filter { r in !self.marquee.fracRects.contains { $0.intersects(r) } }
             self.eraseCheck.state = .on
-            self.status.stringValue = "找到 \(rects.count) 处水印（红框）。不对的话点「清除框」再自己框"
+            self.status.stringValue = "找到 \(rects.count) 处水印（红框）。还有漏的点「框选水印」接着框；框错的在框选时单击删掉"
             self.refresh()
         }
     }
@@ -713,11 +823,13 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         endField.stringValue = ClipEditor.fmt(endT)
         lengthLabel.stringValue = hasVideo ? String(format: "共 %.2f 秒", max(0, endT - startT)) : ""
         eraseCheck.isEnabled = !marquee.fracRects.isEmpty
+        marquee.showSubtitle = subPopup.indexOfSelectedItem != 0 || marquee.selecting == .subtitle
         exportButton.isEnabled = hasVideo && endT > startT && exporting == nil
         undoButton.isEnabled = !undoStack.isEmpty
         if case .exported? = undoStack.last { undoButton.title = "↶ 撤销导出" } else { undoButton.title = "↶ 撤销" }
-        if eraseCheck.state == .on && !marquee.fracRects.isEmpty && format.indexOfSelectedItem == 1 {
-            status.stringValue = "抹水印需要重新编码：会自动改用「精确到帧 · 接近无损」"
+        let needsEncode = (eraseCheck.state == .on && !marquee.fracRects.isEmpty) || (subPopup.indexOfSelectedItem != 0 && marquee.subRect != nil)
+        if needsEncode && format.indexOfSelectedItem == 1 {
+            status.stringValue = "抹水印、去字幕需要重新编码：会自动改用「精确到帧 · 接近无损」"
         }
     }
 
@@ -764,7 +876,9 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         }
         stopPlayback()
         let rects = eraseCheck.state == .on ? marquee.fracRects : []
-        let filter = rects.isEmpty ? nil : Watermark.delogoFilter(rects, width: Int(videoSize.width), height: Int(videoSize.height))
+        let subMode = Subtitle.Mode(rawValue: subPopup.indexOfSelectedItem) ?? .keep
+        let filter = Watermark.videoFilter(watermarks: rects, subtitle: marquee.subRect, mode: subMode,
+                                           width: Int(videoSize.width), height: Int(videoSize.height))
         var mode = format.indexOfSelectedItem
         if mode == 1 && filter != nil { mode = 0 }
         let dur = endT - startT
@@ -864,7 +978,11 @@ final class ClipEditor: NSObject, NSWindowDelegate {
             bar.isHidden = false
             if indeterminate { bar.startAnimation(nil) }
             let what = remote != nil ? "正在下载这一段并导出" : (mode == 1 ? "正在拷贝原画质片段" : "正在高画质导出")
-            status.stringValue = "\(what)\(filter != nil ? "（同时抹掉水印）" : "")…"
+            var extra: [String] = []
+            if !rects.isEmpty { extra.append("抹掉 \(rects.count) 处水印") }
+            if subMode == .erase && marquee.subRect != nil { extra.append("抹掉字幕") }
+            if subMode == .crop && marquee.subRect != nil { extra.append("裁掉字幕") }
+            status.stringValue = "\(what)\(extra.isEmpty ? "" : "（同时" + extra.joined(separator: "、") + "）")…"
             refresh()
         } catch {
             status.stringValue = "导出失败：\(error.localizedDescription)"

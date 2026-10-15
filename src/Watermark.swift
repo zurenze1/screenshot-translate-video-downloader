@@ -1,6 +1,7 @@
 // 自动找水印：在整段视频里均匀取十几帧，画面在变、某个角落的笔画却一直不动 → 那就是水印
 import Cocoa
 import AVFoundation
+import Vision
 
 enum Watermark {
     /// 返回水印框（0~1 的比例坐标，原点在左上），找不到返回空
@@ -174,6 +175,82 @@ enum Watermark {
             return "delogo=x=\(x):y=\(y):w=\(w):h=\(h)"
         }
         return parts.isEmpty ? nil : parts.joined(separator: ",")
+    }
+}
+
+
+// MARK: - 字幕：找出字幕所在的那一条区域，按选择抹掉或裁掉
+
+enum Subtitle {
+    enum Mode: Int { case keep = 0, erase, crop }
+
+    /// 在取样的帧里找字幕：画面下方（或上方）、水平居中、不同帧内容在变的文字行。返回比例框（原点左上）
+    static func detect(frames: [CGImage]) -> CGRect? {
+        var boxes: [CGRect] = []        // 比例坐标，原点左上
+        var texts: [String] = []
+        for img in frames {
+            let req = VNRecognizeTextRequest()
+            req.recognitionLevel = .accurate      // 快速模式只认英文字母，中文字幕要用准确模式
+            req.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US", "ja-JP", "ko-KR"]
+            req.usesLanguageCorrection = false
+            try? VNImageRequestHandler(cgImage: img, options: [:]).perform([req])
+            for o in req.results ?? [] {
+                let b = o.boundingBox            // 原点左下
+                let r = CGRect(x: b.minX, y: 1 - b.maxY, width: b.width, height: b.height)
+                // 字幕：在下方 40% 或上方 18%，横向大致居中，不能太矮
+                let inBand = r.midY > 0.6 || r.midY < 0.18
+                let centered = abs(r.midX - 0.5) < 0.22
+                guard inBand, centered, r.height > 0.02, r.height < 0.15, r.width > 0.06 else { continue }
+                boxes.append(r)
+                texts.append(o.topCandidates(1).first?.string ?? "")
+            }
+        }
+        // 至少在 3 帧里出现过，而且内容不全一样（全一样的是固定标题、水印，不是字幕）
+        guard boxes.count >= 3, Set(texts).count >= 2 else { return nil }
+        // 字幕每一帧都在同一高度：按文字行的中线高度分组，取出现在最多帧里的那一行（一样多时取更靠下的）
+        var best: [CGRect] = []
+        var bestScore = -1.0
+        for c in boxes {
+            let row = boxes.filter { abs($0.midY - c.midY) < max(0.02, c.height * 0.6) }
+            let score = Double(row.count) + Double(c.midY) * 0.5
+            if score > bestScore { bestScore = score; best = row }
+        }
+        let group = best
+        guard group.count >= 3 else { return nil }
+        // 去掉零星的极端值：按上下边排序取中间 90%
+        let ys0 = group.map { $0.minY }.sorted(), ys1 = group.map { $0.maxY }.sorted()
+        let lo = ys0[Int(Double(ys0.count - 1) * 0.05)], hi = ys1[Int(Double(ys1.count - 1) * 0.95)]
+        let x0 = group.map { $0.minX }.min() ?? 0.2, x1 = group.map { $0.maxX }.max() ?? 0.8
+        // 字幕长短不一，左右多留一些
+        let padY = (hi - lo) * 0.25 + 0.006
+        let minX = max(0.02, min(x0, 0.5 - (x1 - x0) / 2) - 0.04), maxX = min(0.98, max(x1, 0.5 + (x1 - x0) / 2) + 0.04)
+        return CGRect(x: minX, y: max(0, lo - padY), width: maxX - minX, height: min(1, hi + padY) - max(0, lo - padY))
+    }
+}
+
+extension Watermark {
+    /// 把「抹水印」「去字幕」合成一个 ffmpeg 画面滤镜；什么都不做时返回 nil
+    static func videoFilter(watermarks: [CGRect], subtitle: CGRect?, mode: Subtitle.Mode, width: Int, height: Int) -> String? {
+        var chain: [String] = []
+        if let d = delogoFilter(watermarks, width: width, height: height) { chain.append(d) }
+        var graph = chain.joined(separator: ",")
+        if let s = subtitle, mode != .keep, width > 0, height > 0 {
+            func even(_ v: CGFloat) -> Int { max(2, Int(v / 2) * 2) }
+            let y = even(s.minY * CGFloat(height))
+            let h = min(even(s.height * CGFloat(height)), height - y)
+            let pre = graph.isEmpty ? "" : graph + ","
+            switch mode {
+            case .erase:
+                // 字幕那一条用周围的画面填平（比模糊干净得多）
+                if let d = delogoFilter([s], width: width, height: height) { graph = pre + d }
+            case .crop:
+                // 字幕在下面：只保留字幕上方；字幕在上面：只保留字幕下方
+                if s.midY > 0.5 { graph = pre + "crop=iw:\(even(CGFloat(y))):0:0" }
+                else { let top = even(CGFloat(y + h)); graph = pre + "crop=iw:\(even(CGFloat(height - top))):0:\(top)" }
+            case .keep: break
+            }
+        }
+        return graph.isEmpty ? nil : graph
     }
 }
 
