@@ -557,11 +557,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         buildStatusItem()
         buildScreenButton()
-        ClipEditor.download = { [weak self] url, done in
-            guard let self = self else { return }
-            self.downloader.window.orderFront(nil)
-            self.downloader.start(url, onFinished: done)
-        }
 
         let opt = Int(optionKey)
         var failed: [String] = []

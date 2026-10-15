@@ -21,6 +21,18 @@ enum Tools {
 
     static var ytdlp: String? { find("yt-dlp") ?? find("yt-dlp_macos") }
 
+    /// 每次调用 yt-dlp 都带上：代理、JS 运行环境、重试、浏览器登录状态
+    static func commonArgs() -> [String] {
+        var a = ["--retries", "10", "--fragment-retries", "10", "--extractor-retries", "5", "--socket-timeout", "20"]
+        if let js = jsRuntime { a += ["--js-runtimes", js] }
+        if let px = systemProxy { a += ["--proxy", px] }
+        if let ff = ffmpeg { a += ["--ffmpeg-location", ff] }
+        let browsers = ["", "safari", "chrome", "edge", "firefox"]
+        let bi = UserDefaults.standard.integer(forKey: "dlCookies")
+        if bi > 0 && bi < browsers.count { a += ["--cookies-from-browser", browsers[bi]] }
+        return a
+    }
+
     /// YouTube 要靠 JS 运行环境算出下载参数，没有它会被限速、缺画质
     static var jsRuntime: String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -357,17 +369,43 @@ final class JobRow: NSView {
 // MARK: - 下载窗口
 
 final class DownloaderController: NSObject, NSWindowDelegate {
-    static let folder: URL = {
-        let d = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("截图翻译视频下载", isDirectory: true)
+    static let defaultFolder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("截图翻译视频下载", isDirectory: true)
+
+    /// 保存位置：用户自己选的文件夹，没选过就用「下载/截图翻译视频下载」
+    static var folder: URL {
+        let d = UserDefaults.standard.string(forKey: "saveFolder").map { URL(fileURLWithPath: $0, isDirectory: true) } ?? defaultFolder
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
-    }()
+    }
+
+    /// 弹出选择文件夹；选好返回路径
+    static func chooseFolder(key: String, current: URL, in window: NSWindow?, done: @escaping (URL) -> Void) {
+        let p = NSOpenPanel()
+        p.canChooseDirectories = true
+        p.canChooseFiles = false
+        p.canCreateDirectories = true
+        p.prompt = "存到这里"
+        p.message = "选择保存位置"
+        p.directoryURL = current
+        let handle: (NSApplication.ModalResponse) -> Void = { r in
+            guard r == .OK, let u = p.url else { return }
+            UserDefaults.standard.set(u.path, forKey: key)
+            done(u)
+        }
+        if let w = window { p.beginSheetModal(for: w, completionHandler: handle) } else { handle(p.runModal()) }
+    }
+
+    static func shortPath(_ u: URL) -> String {
+        u.path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~")
+    }
 
     let window: NSWindow
     private let field = NSTextField()
     private let quality = NSPopUpButton(frame: .zero, pullsDown: false)
     private let cookies = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let autoWM = NSButton(checkboxWithTitle: "自动去水印", target: nil, action: nil)
+    private let folderButton = NSButton(title: "", target: nil, action: nil)
     private let list = NSStackView()
     private let footer = NSTextField(labelWithString: "")
     private let emptyHint = NSTextField(wrappingLabelWithString: "")
@@ -405,8 +443,18 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         cookies.selectItem(at: UserDefaults.standard.integer(forKey: "dlCookies"))
         cookies.target = self; cookies.action = #selector(saveOptions)
         cookies.toolTip = "B站 4K / 大会员画质、需要登录才能看的视频，选你平时登录这个网站的浏览器"
-        let open = NSButton(title: "打开下载文件夹", target: self, action: #selector(openFolder))
+        let open = NSButton(title: "打开", target: self, action: #selector(openFolder))
         open.bezelStyle = .rounded
+        folderButton.bezelStyle = .rounded
+        folderButton.target = self
+        folderButton.action = #selector(changeFolder)
+        folderButton.lineBreakMode = .byTruncatingMiddle
+        folderButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        folderButton.toolTip = "点一下换保存位置"
+        updateFolderButton()
+        autoWM.state = UserDefaults.standard.object(forKey: "autoWatermark") as? Bool ?? true ? .on : .off
+        autoWM.target = self; autoWM.action = #selector(saveOptions)
+        autoWM.toolTip = "下载完自动找画面角落里一直不动的水印（比如 B站 UP 主水印）并抹掉，直接替换原文件，不会多占一份空间。没找到水印就不动原视频。"
         for c in [quality, cookies] { c.controlSize = .regular }
 
         let row1 = NSStackView(views: [field, paste, go])
@@ -414,7 +462,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let flex = NSView()
         flex.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let row2 = NSStackView(views: [quality, cookies, flex, open])
+        let row2 = NSStackView(views: [quality, cookies, autoWM, flex, folderButton, open])
         row2.spacing = 8
 
         list.orientation = .vertical
@@ -487,7 +535,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         let f = Tools.ffmpeg != nil ? "ffmpeg ✓" : "ffmpeg 未安装（只能下载不需要合成的格式）"
         let j = Tools.jsRuntime != nil ? "YouTube 加速 ✓" : "YouTube 加速未开启（可装 deno 或 Node.js）"
         let px = Tools.systemProxy.map { "代理 \($0.replacingOccurrences(of: "http://", with: ""))" } ?? "直连"
-        footer.stringValue = "存到：下载/截图翻译视频下载　·　\(y)　·　\(f)　·　\(j)　·　\(px)"
+        footer.stringValue = "\(y)　·　\(f)　·　\(j)　·　\(px)"
     }
 
     // MARK: 打开
@@ -507,9 +555,37 @@ final class DownloaderController: NSObject, NSWindowDelegate {
     @objc private func saveOptions() {
         UserDefaults.standard.set(quality.indexOfSelectedItem, forKey: "dlQuality")
         UserDefaults.standard.set(cookies.indexOfSelectedItem, forKey: "dlCookies")
+        UserDefaults.standard.set(autoWM.state == .on, forKey: "autoWatermark")
     }
 
     @objc private func openFolder() { NSWorkspace.shared.open(DownloaderController.folder) }
+
+    @objc private func changeFolder() {
+        DownloaderController.chooseFolder(key: "saveFolder", current: DownloaderController.folder, in: window) { [weak self] _ in
+            self?.updateFolderButton(); self?.refreshFooter()
+        }
+    }
+
+    private func updateFolderButton() {
+        folderButton.title = "存到：\(DownloaderController.shortPath(DownloaderController.folder)) ▾"
+    }
+
+    /// 下载完成：需要的话先自动去水印，再标记完成
+    private func finish(_ job: DownloadJob, file: URL?, summary: @escaping () -> String) {
+        guard autoWM.state == .on, let f = file, ClipEditor.isVideo(f) else {
+            job.update { job.state = .done; job.progress = 1; job.detail = summary() }
+            notifyDone(job); return
+        }
+        WatermarkRemover.process(f, progress: { text, p in
+            job.update { job.detail = text; job.progress = p }
+        }, done: { [weak self] removed, err in
+            job.update {
+                job.state = .done; job.progress = 1
+                job.detail = summary() + (removed ? " · 已自动去水印" : (err.map { " · \($0)" } ?? " · 没发现水印"))
+            }
+            self?.notifyDone(job)
+        })
+    }
 
     @objc private func pasteAndStart() {
         field.stringValue = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -604,11 +680,11 @@ final class DownloaderController: NSObject, NSWindowDelegate {
                     self?.downloadDirect(Array(cands.dropFirst()), name: name, ext: ext, job: job)
                     return
                 }
-                job.update {
-                    job.state = .done; job.files = [u]; job.progress = 1
-                    job.detail = "✅ 完成 · 无水印 · \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)) · \(u.lastPathComponent)"
+                job.files = [u]
+                self?.finish(job, file: u) {
+                    let sz = (try? FileManager.default.attributesOfItem(atPath: u.path)[.size] as? Int) ?? size
+                    return "✅ 完成 · \(ByteCountFormatter.string(fromByteCount: Int64(sz), countStyle: .file)) · \(u.lastPathComponent)"
                 }
-                self?.notifyDone(job)
             case .failure:
                 self?.downloadDirect(Array(cands.dropFirst()), name: name, ext: ext, job: job)
             }
@@ -664,19 +740,13 @@ final class DownloaderController: NSObject, NSWindowDelegate {
                     "--print", "after_move:@@F %(filepath)s",
                     "--no-simulate",
                     "-N", "8",                       // 分片视频 8 路同时下
-                    "--retries", "10", "--fragment-retries", "10"]
-        if let js = Tools.jsRuntime { args += ["--js-runtimes", js] }
-        if let px = Tools.systemProxy { args += ["--proxy", px] }
+                    ] + Tools.commonArgs()
         let ff = Tools.ffmpeg
-        if let ff = ff { args += ["--ffmpeg-location", ff] }
         switch quality.indexOfSelectedItem {
         case 1: args += ff != nil ? ["-S", "res:1080,fps,vcodec:h264,acodec:aac", "--merge-output-format", "mp4"] : ["-f", "b[height<=1080]/b"]
         case 2: args += ff != nil ? ["-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "0"] : ["-f", "ba"]
         default: args += ff != nil ? ["-S", "res,fps,vcodec:h264,acodec:aac", "--merge-output-format", "mp4"] : ["-f", "b"]
         }
-        let browsers = ["", "safari", "chrome", "edge", "firefox"]
-        let bi = cookies.indexOfSelectedItem
-        if bi > 0 && bi < browsers.count { args += ["--cookies-from-browser", browsers[bi]] }
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: ytdlp)
@@ -735,13 +805,11 @@ final class DownloaderController: NSObject, NSWindowDelegate {
                 guard job.state == .running else { return }
                 if proc.terminationStatus == 0 {
                     let f = job.files.last
-                    let size = f.flatMap { (try? FileManager.default.attributesOfItem(atPath: $0.path)[.size] as? Int) } ?? 0
-                    let res = f.map { DownloaderController.resolution(of: $0) } ?? ""
-                    job.update {
-                        job.state = .done; job.progress = 1
-                        job.detail = "✅ 完成\(res.isEmpty ? "" : " · " + res) · \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)) · \(f?.lastPathComponent ?? "")"
+                    self?.finish(job, file: f) {
+                        let size = f.flatMap { (try? FileManager.default.attributesOfItem(atPath: $0.path)[.size] as? Int) } ?? 0
+                        let res = f.map { DownloaderController.resolution(of: $0) } ?? ""
+                        return "✅ 完成\(res.isEmpty ? "" : " · " + res) · \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)) · \(f?.lastPathComponent ?? "")"
                     }
-                    self?.notifyDone(job)
                 } else {
                     job.update { job.state = .failed; job.detail = DownloaderController.explain(errText, link: job.link) }
                 }
