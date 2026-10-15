@@ -338,15 +338,16 @@ final class ClipEditor: NSObject, NSWindowDelegate {
     private var undoStack: [UndoItem] = []
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 700),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1060, height: 780),
                           styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         super.init()
         window.title = "片段截取 · 原画质"
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 720, height: 540)
+        window.minSize = NSSize(width: 960, height: 700)
         window.delegate = self
         window.center()
         buildUI()
+        ProductTheme.apply(to: window)
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let self = self, self.window.isKeyWindow else { return e }
             let editing = self.window.firstResponder is NSTextView
@@ -372,6 +373,7 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         root.registerForDraggedTypes([.fileURL])
         root.onDrop = { [weak self] u in self?.open(u) }
         window.contentView = root
+        let header = ProductTheme.header("04 / 片段截取", "好动效，只留那几秒。", "预览后选起止点，字幕、水印和保存位置由你决定。")
 
         linkField.placeholderString = "粘贴视频链接回车：在线预览，不用整个下载；也可以把本地视频拖进窗口"
         linkField.target = self; linkField.action = #selector(loadFromField)
@@ -385,7 +387,9 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         playerView.translatesAutoresizingMaskIntoConstraints = false
         let stage = NSView()
         stage.wantsLayer = true
-        stage.layer?.backgroundColor = NSColor.black.cgColor
+        stage.layer?.backgroundColor = ProductTheme.dark.cgColor
+        stage.layer?.cornerRadius = 12
+        stage.layer?.masksToBounds = true
         stage.addSubview(playerView)
         marquee.translatesAutoresizingMaskIntoConstraints = false
         marquee.videoBounds = { [weak self] in
@@ -416,10 +420,12 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         marquee.onSelectingChanged = { [weak self] in
             guard let self = self else { return }
             self.marqueeButton.title = self.marquee.selecting == .watermark ? "✓ 完成框选" : "框选水印"
+            ProductTheme.styleButton(self.marqueeButton)
         }
         stage.addSubview(marquee)
-        hint.stringValue = "看到好看的动效，只想要其中几秒？\n\n1. 上面粘贴视频链接回车 —— 在线预览，不会下载整个视频\n2. 播放到开始的地方按「设为起点」（键盘 I），到结束的地方按「设为终点」（O）\n3. 有水印点「自动找水印」，或「框选水印」自己框\n4. 点「导出片段」—— 只下载这几秒，原画质，水印同时抹掉\n\n点错了随时按「撤销」（⌘Z），导出的文件也能撤销"
-        hint.textColor = NSColor(white: 0.85, alpha: 1)
+        hint.stringValue = "把精彩的几秒，留下来。\n\n粘贴支持的视频链接，或打开本地视频。\n按 I 选起点，按 O 选终点，再导出这一段。\n\n字幕和水印可以分别处理，点错了随时撤销。"
+        hint.textColor = ProductTheme.surface.withAlphaComponent(0.85)
+        hint.identifier = NSUserInterfaceItemIdentifier("preserveThemeColor")
         hint.font = .systemFont(ofSize: 14)
         hint.alignment = .center
         hint.translatesAutoresizingMaskIntoConstraints = false
@@ -461,8 +467,9 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         subPopup.target = self; subPopup.action = #selector(subModeChanged)
         subPopup.toolTip = "想要字幕就选「保留」；不想要就选「抹掉」或「裁掉」，会自动找字幕位置（黄框），不准可以点「框选字幕」自己框"
         let row2 = NSStackView(views: [button("自动找水印", #selector(autoDetect)), marqueeButton,
-                                       button("清除水印框", #selector(clearMarquee)), eraseCheck, flex(),
-                                       subPopup, button("框选字幕", #selector(beginSubtitleMarquee)), audioCheck])
+                                       button("清除水印框", #selector(clearMarquee)), eraseCheck, flex(), audioCheck])
+        let rowSubtitle = NSStackView(views: [ProductTheme.label("字幕处理"), subPopup,
+                                             button("框选字幕", #selector(beginSubtitleMarquee)), flex()])
 
         format.addItems(withTitles: ["精确到帧 · 接近无损（H.264 MP4，推荐）",
                                      "原画质无损 · 极快（直接拷贝，起点对齐到最近的关键帧）",
@@ -470,6 +477,7 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         format.selectItem(at: UserDefaults.standard.integer(forKey: "clipFormat"))
         format.target = self; format.action = #selector(optionsChanged)
         exportButton.bezelStyle = .rounded
+        ProductTheme.primary(exportButton)
         exportButton.keyEquivalent = "\r"
         exportButton.target = self; exportButton.action = #selector(exportClip)
         folderButton.bezelStyle = .rounded
@@ -486,20 +494,20 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let row4 = NSStackView(views: [status, bar])
 
-        let stack = NSStackView(views: [top, stage, row1, row2, row3, row4])
+        let stack = NSStackView(views: [header, top, stage, row1, row2, rowSubtitle, row3, row4])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 18, left: 22, bottom: 18, right: 22)
         stack.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: root.leadingAnchor), stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             stack.topAnchor.constraint(equalTo: root.topAnchor), stack.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
-        for v in [top, stage, row1, row2, row3, row4] as [NSView] {
+        for v in [header, top, stage, row1, row2, rowSubtitle, row3, row4] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
-            v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28).isActive = true
+            v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44).isActive = true
         }
         stage.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
         stage.heightAnchor.constraint(greaterThanOrEqualToConstant: 280).isActive = true
@@ -827,6 +835,7 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         exportButton.isEnabled = hasVideo && endT > startT && exporting == nil
         undoButton.isEnabled = !undoStack.isEmpty
         if case .exported? = undoStack.last { undoButton.title = "↶ 撤销导出" } else { undoButton.title = "↶ 撤销" }
+        ProductTheme.styleButton(undoButton)
         let needsEncode = (eraseCheck.state == .on && !marquee.fracRects.isEmpty) || (subPopup.indexOfSelectedItem != 0 && marquee.subRect != nil)
         if needsEncode && format.indexOfSelectedItem == 1 {
             status.stringValue = "抹水印、去字幕需要重新编码：会自动改用「精确到帧 · 接近无损」"
@@ -845,6 +854,7 @@ final class ClipEditor: NSObject, NSWindowDelegate {
 
     private func updateFolderButton() {
         folderButton.title = "存到：\(DownloaderController.shortPath(ClipEditor.folder)) ▾"
+        ProductTheme.styleButton(folderButton)
     }
 
     // MARK: 导出

@@ -347,6 +347,8 @@ final class JobRow: NSView {
         case .done: button.title = "在访达中显示"
         case .failed, .cancelled: button.title = "重试"
         }
+        ProductTheme.styleButton(button)
+        ProductTheme.styleButton(clipButton)
     }
 
     var onRetry: ((DownloadJob) -> Void)?
@@ -412,25 +414,28 @@ final class DownloaderController: NSObject, NSWindowDelegate {
     private var jobs: [DownloadJob] = []
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 460),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 560),
                           styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         super.init()
-        window.title = "视频下载 · 无水印原画质"
+        window.title = "视频下载"
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 480, height: 320)
+        window.minSize = NSSize(width: 680, height: 480)
         window.delegate = self
         window.center()
         buildUI()
+        ProductTheme.apply(to: window)
     }
 
     private func buildUI() {
         let content = window.contentView!
+        let header = ProductTheme.header("03 / 视频下载", "把灵感，存到手边。", "粘贴作品链接，选择画质和保存位置。")
 
         field.placeholderString = "粘贴抖音 / B站 / YouTube / 小红书 / TikTok 的链接或分享文字，按回车"
         field.font = .systemFont(ofSize: 14)
         field.target = self
         field.action = #selector(startFromField)
         let go = NSButton(title: "下载", target: self, action: #selector(startFromField))
+        ProductTheme.primary(go)
         go.bezelStyle = .rounded
         go.keyEquivalent = "\r"
         let paste = NSButton(title: "粘贴并下载", target: self, action: #selector(pasteAndStart))
@@ -462,8 +467,13 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let flex = NSView()
         flex.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let row2 = NSStackView(views: [quality, cookies, autoWM, flex, folderButton, open])
+        let row2 = NSStackView(views: [quality, cookies, autoWM, flex])
         row2.spacing = 8
+        let folderFlex = NSView()
+        folderFlex.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
+        let folderRow = NSStackView(views: [folderButton, open, folderFlex])
+        folderRow.spacing = 8
+        folderButton.widthAnchor.constraint(lessThanOrEqualToConstant: 540).isActive = true
 
         list.orientation = .vertical
         list.alignment = .leading
@@ -472,7 +482,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         let doc = FlippedView()
         doc.translatesAutoresizingMaskIntoConstraints = false
         doc.addSubview(list)
-        emptyHint.stringValue = "支持：抖音（视频、图文）、B站、YouTube、小红书、TikTok、微博、X、Instagram、西瓜视频等上千个网站。\n\n抖音直接下载无水印原文件；YouTube 没有水印；B站如果 UP 主开了水印，平台会把它压进画面里，下载完点「截片段 / 去水印」框选掉。都会挑最高画质并合成 MP4（能直接拖进剪辑软件）。\n\n也可以把链接直接拖到桌面小圆球上。"
+        emptyHint.stringValue = "还没有下载任务。\n\n把作品的分享链接粘进来，选好保存位置再下载。\n支持抖音、B站、YouTube、小红书等，具体支持随网站变化。\n\n只想要其中几秒？打开「片段截取」，预览后选择起止点。\n去水印采用周围画面填平，复杂背景可能留痕。"
         emptyHint.textColor = .secondaryLabelColor
         emptyHint.font = .systemFont(ofSize: 12)
         emptyHint.translatesAutoresizingMaskIntoConstraints = false
@@ -508,11 +518,11 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         flex2.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
         let row3 = NSStackView(views: [footer, flex2, update])
 
-        let stack = NSStackView(views: [row1, row2, scroll, row3])
+        let stack = NSStackView(views: [header, row1, row2, scroll, folderRow, row3])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 12, right: 14)
+        stack.spacing = 14
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 22, bottom: 18, right: 22)
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -521,9 +531,9 @@ final class DownloaderController: NSObject, NSWindowDelegate {
             stack.topAnchor.constraint(equalTo: content.topAnchor),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
-        for v in [row1, row2, scroll, row3] as [NSView] {
+        for v in [header, row1, row2, scroll, folderRow, row3] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
-            v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28).isActive = true
+            v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44).isActive = true
         }
         scroll.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
         scroll.heightAnchor.constraint(greaterThanOrEqualTo: content.heightAnchor, multiplier: 0.0, constant: 140).isActive = true
@@ -535,7 +545,8 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         let f = Tools.ffmpeg != nil ? "ffmpeg ✓" : "ffmpeg 未安装（只能下载不需要合成的格式）"
         let j = Tools.jsRuntime != nil ? "YouTube 加速 ✓" : "YouTube 加速未开启（可装 deno 或 Node.js）"
         let px = Tools.systemProxy.map { "代理 \($0.replacingOccurrences(of: "http://", with: ""))" } ?? "直连"
-        footer.stringValue = "\(y)　·　\(f)　·　\(j)　·　\(px)"
+        footer.toolTip = "\(y)　·　\(f)　·　\(j)　·　\(px)"
+        footer.stringValue = Tools.ytdlp != nil && Tools.ffmpeg != nil ? "下载与片段组件已就绪" : "首次使用请检查下载组件"
     }
 
     // MARK: 打开
@@ -568,6 +579,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
 
     private func updateFolderButton() {
         folderButton.title = "存到：\(DownloaderController.shortPath(DownloaderController.folder)) ▾"
+        ProductTheme.styleButton(folderButton)
     }
 
     /// 下载完成：需要的话先自动去水印，再标记完成

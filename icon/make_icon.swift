@@ -1,113 +1,57 @@
-// 生成「灵犀」图标：深夜蓝→紫的圆角方块，中间一颗发光的「灵犀一点」小球，外面一道光环
-// 用法：swiftc make_icon.swift -o make_icon && ./make_icon 输出目录
+// Cream / champagne icon, matching the product page and native floating toolbox.
+// swiftc make_icon.swift -o make_icon && ./make_icon AppIcon.iconset
 import Cocoa
 
-func draw(_ S: CGFloat) -> NSBitmapImageRep {
-    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(S), pixelsHigh: Int(S), bitsPerSample: 8,
-                               samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
-                               bytesPerRow: 0, bitsPerPixel: 0)!
+func draw(_ size: CGFloat) -> NSBitmapImageRep {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size), pixelsHigh: Int(size), bitsPerSample: 8,
+                              samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     let g = NSGraphicsContext.current!.cgContext
-    let u = S / 1024
-    let cs = CGColorSpaceCreateDeviceRGB()
+    let u = size / 1024
     func c(_ r: CGFloat, _ gg: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> CGColor { CGColor(red: r, green: gg, blue: b, alpha: a) }
-
-    // 底板（macOS 标准尺寸：824 见方，圆角约 185）
-    let body = CGRect(x: 100 * u, y: 100 * u, width: 824 * u, height: 824 * u)
-    let path = CGPath(roundedRect: body, cornerWidth: 185 * u, cornerHeight: 185 * u, transform: nil)
+    let space = CGColorSpaceCreateDeviceRGB()
+    g.scaleBy(x: u, y: u)
+    let body = CGPath(roundedRect: CGRect(x: 100, y: 100, width: 824, height: 824), cornerWidth: 185, cornerHeight: 185, transform: nil)
     g.saveGState()
-    g.setShadow(offset: CGSize(width: 0, height: -10 * u), blur: 28 * u, color: c(0, 0, 0, 0.35))
-    g.addPath(path); g.setFillColor(c(0.1, 0.1, 0.2)); g.fillPath()
+    g.setShadow(offset: CGSize(width: 0, height: -12), blur: 30, color: c(0.28, 0.22, 0.12, 0.22))
+    g.addPath(body); g.setFillColor(c(0.90, 0.85, 0.73)); g.fillPath()
     g.restoreGState()
-
-    g.saveGState()
-    g.addPath(path); g.clip()
-    let bg = CGGradient(colorsSpace: cs, colors: [c(0.07, 0.08, 0.22), c(0.22, 0.16, 0.55), c(0.50, 0.28, 0.86)] as CFArray,
-                        locations: [0, 0.55, 1])!
-    g.drawLinearGradient(bg, start: CGPoint(x: 200 * u, y: 100 * u), end: CGPoint(x: 830 * u, y: 924 * u), options: [])
-    // 右上角柔光
-    let glow = CGGradient(colorsSpace: cs, colors: [c(1.0, 0.55, 0.85, 0.45), c(1.0, 0.55, 0.85, 0)] as CFArray, locations: [0, 1])!
-    g.drawRadialGradient(glow, startCenter: CGPoint(x: 820 * u, y: 860 * u), startRadius: 0,
-                         endCenter: CGPoint(x: 820 * u, y: 860 * u), endRadius: 520 * u, options: [])
-    // 中心蓝色光晕
-    let center = CGPoint(x: 512 * u, y: 500 * u)
-    let halo = CGGradient(colorsSpace: cs, colors: [c(0.35, 0.85, 1.0, 0.55), c(0.35, 0.85, 1.0, 0)] as CFArray, locations: [0, 1])!
-    g.drawRadialGradient(halo, startCenter: center, startRadius: 0, endCenter: center, endRadius: 360 * u, options: [])
-
-    // 倾斜的光环（后半段在球后面）
-    // 整圈画在球后面；球前面那一段再补画一次（只画在球的范围内），两端不会有接缝
-    func ring(front: Bool) {
-        g.saveGState()
-        if front {
-            let R0: CGFloat = 165 * u
-            g.addEllipse(in: CGRect(x: center.x - R0, y: center.y - R0, width: 2 * R0, height: 2 * R0)); g.clip()
-        }
-        g.translateBy(x: center.x, y: center.y)
-        g.rotate(by: 0.42)
-        let rr = CGRect(x: -310 * u, y: -92 * u, width: 620 * u, height: 184 * u)
-        if front { g.clip(to: CGRect(x: -400 * u, y: -400 * u, width: 800 * u, height: 400 * u)) }
-        g.addEllipse(in: rr)
-        g.setLineWidth(22 * u)
-        g.replacePathWithStrokedPath()
-        g.clip()
-        let rg = CGGradient(colorsSpace: cs, colors: [c(0.55, 0.95, 1.0, 1), c(1.0, 0.7, 0.95, 1)] as CFArray, locations: [0, 1])!
-        g.drawLinearGradient(rg, start: CGPoint(x: -310 * u, y: 0), end: CGPoint(x: 310 * u, y: 0), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-        g.restoreGState()
+    g.saveGState(); g.addPath(body); g.clip()
+    let paper = CGGradient(colorsSpace: space, colors: [c(1, 0.99, 0.95), c(0.95, 0.92, 0.85), c(0.86, 0.81, 0.70)] as CFArray, locations: [0, 0.6, 1])!
+    g.drawLinearGradient(paper, start: CGPoint(x: 240, y: 910), end: CGPoint(x: 830, y: 110), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    let seam = CGPath(roundedRect: CGRect(x: 136, y: 136, width: 752, height: 752), cornerWidth: 155, cornerHeight: 155, transform: nil)
+    g.addPath(seam); g.setStrokeColor(c(1, 1, 0.98, 0.65)); g.setLineWidth(2); g.strokePath()
+    let corners = CGMutablePath()
+    for (x, y, dx, dy) in [(300.0, 300.0, 1.0, 1.0), (724, 300, -1, 1), (724, 724, -1, -1), (300, 724, 1, -1)] {
+        corners.move(to: CGPoint(x: x, y: y + dy * 99))
+        corners.addLine(to: CGPoint(x: x, y: y))
+        corners.addLine(to: CGPoint(x: x + dx * 99, y: y))
     }
-    ring(front: false)
-
-    // 发光小球
-    let R: CGFloat = 165 * u
     g.saveGState()
-    g.setShadow(offset: .zero, blur: 70 * u, color: c(0.5, 0.9, 1.0, 0.9))
-    g.addEllipse(in: CGRect(x: center.x - R, y: center.y - R, width: 2 * R, height: 2 * R))
-    g.setFillColor(c(0.6, 0.9, 1.0)); g.fillPath()
+    g.setShadow(offset: CGSize(width: 0, height: -4), blur: 5, color: c(0.38, 0.27, 0.09, 0.25))
+    g.addPath(corners); g.setStrokeColor(c(0.61, 0.49, 0.27)); g.setLineWidth(27); g.setLineJoin(.round); g.setLineCap(.round); g.strokePath()
     g.restoreGState()
     g.saveGState()
-    g.addEllipse(in: CGRect(x: center.x - R, y: center.y - R, width: 2 * R, height: 2 * R)); g.clip()
-    let sphere = CGGradient(colorsSpace: cs, colors: [c(1, 1, 1), c(0.62, 0.92, 1.0), c(0.30, 0.50, 0.98), c(0.36, 0.22, 0.78)] as CFArray,
-                            locations: [0, 0.3, 0.75, 1])!
-    let hl = CGPoint(x: center.x - 60 * u, y: center.y + 70 * u)
-    g.drawRadialGradient(sphere, startCenter: hl, startRadius: 0, endCenter: center, endRadius: R, options: [.drawsAfterEndLocation])
+    g.addPath(corners); g.setLineWidth(22); g.setLineJoin(.round); g.setLineCap(.round); g.replacePathWithStrokedPath(); g.clip()
+    let gold = CGGradient(colorsSpace: space, colors: [c(0.52, 0.40, 0.20), c(0.80, 0.69, 0.43), c(0.95, 0.87, 0.66), c(0.53, 0.42, 0.23)] as CFArray, locations: [0, 0.35, 0.6, 1])!
+    g.drawLinearGradient(gold, start: CGPoint(x: 260, y: 240), end: CGPoint(x: 760, y: 820), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
     g.restoreGState()
-
-    ring(front: true)
-
-    // 一颗小星光（「一点通」）
-    func sparkle(_ p: CGPoint, _ s: CGFloat, _ a: CGFloat) {
-        let sp = CGMutablePath()
-        sp.move(to: CGPoint(x: p.x, y: p.y + s))
-        sp.addQuadCurve(to: CGPoint(x: p.x + s, y: p.y), control: CGPoint(x: p.x + s * 0.12, y: p.y + s * 0.12))
-        sp.addQuadCurve(to: CGPoint(x: p.x, y: p.y - s), control: CGPoint(x: p.x + s * 0.12, y: p.y - s * 0.12))
-        sp.addQuadCurve(to: CGPoint(x: p.x - s, y: p.y), control: CGPoint(x: p.x - s * 0.12, y: p.y - s * 0.12))
-        sp.addQuadCurve(to: CGPoint(x: p.x, y: p.y + s), control: CGPoint(x: p.x - s * 0.12, y: p.y + s * 0.12))
-        g.saveGState()
-        g.setShadow(offset: .zero, blur: s * 0.6, color: c(1, 1, 1, 0.9))
-        g.addPath(sp); g.setFillColor(c(1, 1, 1, a)); g.fillPath()
-        g.restoreGState()
-    }
-    sparkle(CGPoint(x: 735 * u, y: 735 * u), 70 * u, 1)
-    sparkle(CGPoint(x: 300 * u, y: 250 * u), 30 * u, 0.75)
-
-    // 顶部一层玻璃反光
-    let gloss = CGGradient(colorsSpace: cs, colors: [c(1, 1, 1, 0.14), c(1, 1, 1, 0)] as CFArray, locations: [0, 1])!
-    g.drawLinearGradient(gloss, start: CGPoint(x: 0, y: 924 * u), end: CGPoint(x: 0, y: 600 * u), options: [])
+    let play = CGMutablePath()
+    play.move(to: CGPoint(x: 459, y: 410)); play.addLine(to: CGPoint(x: 621, y: 512)); play.addLine(to: CGPoint(x: 459, y: 614)); play.closeSubpath()
+    g.saveGState(); g.setShadow(offset: CGSize(width: 0, height: -6), blur: 7, color: c(0.37, 0.28, 0.12, 0.22))
+    g.addPath(play); g.setFillColor(c(0.64, 0.52, 0.30)); g.fillPath(); g.restoreGState()
+    g.addPath(play); g.clip()
+    g.drawLinearGradient(gold, start: CGPoint(x: 400, y: 420), end: CGPoint(x: 620, y: 660), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
     g.restoreGState()
-
-    // 细边
-    g.addPath(path); g.setStrokeColor(c(1, 1, 1, 0.12)); g.setLineWidth(2 * u); g.strokePath()
-
     NSGraphicsContext.restoreGraphicsState()
     return rep
 }
-
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.iconset"
-try? FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
+try! FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
 for base in [16, 32, 128, 256, 512] {
     for scale in [1, 2] {
-        let px = base * scale
         let name = scale == 1 ? "icon_\(base)x\(base).png" : "icon_\(base)x\(base)@2x.png"
-        try! draw(CGFloat(px)).representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "\(out)/\(name)"))
+        try! draw(CGFloat(base * scale)).representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out).appendingPathComponent(name))
     }
 }

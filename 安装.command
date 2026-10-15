@@ -36,7 +36,7 @@ if [ $build_ok != 1 ]; then
 fi
 cp src/Info.plist "build/$APP/Contents/Info.plist"
 cp src/AppIcon.icns "build/$APP/Contents/Resources/AppIcon.icns"
-# 签名时把「身份」固定成软件 ID，这样重装、更新后「录屏」「辅助功能」权限不会失效
+# 签名时把「身份」固定成软件 ID，减少更新后的权限变化；系统仍可能要求重新授权
 codesign --force --sign - --identifier com.zurenze.desktop-translator \
   -r='designated => identifier "com.zurenze.desktop-translator"' "build/$APP"
 pkill -x DesktopTranslator 2>/dev/null; pkill -x Lingxi 2>/dev/null; pkill -x JietuFanyi 2>/dev/null; sleep 0.5
@@ -44,5 +44,5 @@ rm -rf "/Applications/桌面翻译器.app" "/Applications/灵犀.app"   # 旧名
 rm -rf "/Applications/$APP" && cp -R "build/$APP" /Applications/
 touch "/Applications/$APP"   # 让访达刷新图标
 open "/Applications/$APP"
-echo "✅ 已安装到「应用程序」并启动：桌面右侧会出现圆形小球，菜单栏有「译」。"
-echo "⚠️ 第一次装这个版本要授权一次：系统设置 → 隐私与安全性 →「辅助功能」和「录屏与系统录音」里打开「截图翻译视频下载」（旧的「桌面翻译器」「灵犀」可以点 − 删掉）。以后再更新就不用重新授权了。"
+echo "✅ 已安装到「应用程序」并启动：桌面右侧是奶油金悬浮入口，点开即可使用工具面板；菜单栏有「译」。"
+echo "⚠️ 首次使用或更新后如需授权：系统设置 → 隐私与安全性 →「辅助功能」和「录屏与系统录音」里打开「截图翻译视频下载」（旧的「桌面翻译器」「灵犀」可点 − 移除）。"

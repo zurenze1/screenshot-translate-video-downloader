@@ -198,7 +198,7 @@ final class ThumbCell: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 3, dy: 3)
         let bg = NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8)
-        NSColor.controlBackgroundColor.setFill()
+        ProductTheme.surface.setFill()
         bg.fill()
         if let img = ThumbCache.image(url) {
             let area = r.insetBy(dx: 5, dy: 5)
@@ -212,18 +212,18 @@ final class ThumbCell: NSView {
             NSGraphicsContext.restoreGraphicsState()
         }
         if selected {
-            NSColor.controlAccentColor.setStroke()
+            ProductTheme.gold.setStroke()
             bg.lineWidth = 3
             bg.stroke()
             let c = NSRect(x: r.maxX - 24, y: r.minY + 6, width: 18, height: 18)
-            NSColor.controlAccentColor.setFill()
+            ProductTheme.gold.setFill()
             NSBezierPath(ovalIn: c).fill()
             let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: NSColor.white]
             let s = "✓" as NSString
             let sz = s.size(withAttributes: attrs)
             s.draw(at: NSPoint(x: c.midX - sz.width / 2, y: c.midY - sz.height / 2), withAttributes: attrs)
         } else {
-            NSColor.separatorColor.setStroke()
+            ProductTheme.line.setStroke()
             bg.lineWidth = 1
             bg.stroke()
         }
@@ -310,9 +310,9 @@ final class ShelfGrid: FlippedView {
 final class BandView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.controlAccentColor.withAlphaComponent(0.15).setFill()
+        ProductTheme.gold.withAlphaComponent(0.15).setFill()
         bounds.fill()
-        NSColor.controlAccentColor.setStroke()
+        ProductTheme.gold.setStroke()
         let p = NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5))
         p.lineWidth = 1
         p.stroke()
@@ -334,7 +334,7 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
     var anchorFrame: (() -> NSRect?)?   // 小球的位置
 
     override init() {
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 420),
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 580, height: 500),
                         styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
                         backing: .buffered, defer: false)
         super.init()
@@ -345,9 +345,10 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
         panel.becomesKeyOnlyIfNeeded = true
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 300, height: 240)
+        panel.minSize = NSSize(width: 480, height: 380)
         panel.delegate = self
         buildUI()
+        ProductTheme.apply(to: panel)
         grid.owner = self
         ShelfStore.shared.observe { [weak self] in self?.reloadCells() }
         reloadCells()
@@ -362,6 +363,9 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
 
     private func buildUI() {
         let content = panel.contentView!
+        let header = ProductTheme.header("02 / 截图中转", "截完，下一秒就用上。", "在空白处框选，多张一起拖走。")
+        header.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(header)
         titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
         titleLabel.textColor = .secondaryLabelColor
 
@@ -399,9 +403,12 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
             content.addSubview(v)
         }
         NSLayoutConstraint.activate([
-            top.topAnchor.constraint(equalTo: content.topAnchor, constant: 8),
-            top.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10),
-            top.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -10),
+            header.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
+            header.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            header.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            top.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 16),
+            top.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            top.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             scroll.topAnchor.constraint(equalTo: top.bottomAnchor, constant: 6),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 6),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -6),

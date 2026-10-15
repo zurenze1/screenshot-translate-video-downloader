@@ -173,6 +173,13 @@ enum ScreenOCR {
 final class SourceTextView: NSTextView {
     var onImage: ((CGImage) -> Void)?
 
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if string.isEmpty {
+            ("在这里粘贴文字，或拖入一张截图…" as NSString).draw(at: NSPoint(x: 13, y: 11), withAttributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: ProductTheme.muted.withAlphaComponent(0.7)])
+        }
+    }
+
     private func image(from pb: NSPasteboard) -> CGImage? {
         if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
            let u = urls.first(where: { ["png", "jpg", "jpeg", "heic", "tiff", "tif", "gif", "webp", "bmp"].contains($0.pathExtension.lowercased()) }),
@@ -236,7 +243,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
     private var keyMonitor: Any?
 
     override init() {
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 480, height: 380),
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
                         styleMask: [.titled, .closable, .resizable, .utilityWindow],
                         backing: .buffered, defer: false)
         super.init()
@@ -246,9 +253,10 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 320, height: 240)
+        panel.minSize = NSSize(width: 480, height: 540)
         panel.delegate = self
         buildUI()
+        ProductTheme.apply(to: panel)
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let self = self, self.panel.isKeyWindow else { return e }
             if e.keyCode == 53 { self.closeAndReturn(); return nil }                    // Esc
@@ -259,22 +267,25 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
 
     private func buildUI() {
         let content = panel.contentView!
+        let header = ProductTheme.header("01 / 即时翻译", "看懂，再继续。", "粘贴文字或拖入图片，自动中英互译。")
+        let sourceLabel = ProductTheme.label("原文  /  粘贴即译")
+        let resultLabel = ProductTheme.label("译文")
 
-        sourceView.font = .systemFont(ofSize: 13)
-        sourceView.textColor = .secondaryLabelColor
+        sourceView.font = .systemFont(ofSize: 14)
+        sourceView.textColor = ProductTheme.ink
         sourceView.isRichText = false
         sourceView.allowsUndo = true
-        sourceView.textContainerInset = NSSize(width: 6, height: 6)
-        sourceView.backgroundColor = .controlBackgroundColor
+        sourceView.textContainerInset = NSSize(width: 12, height: 10)
+        sourceView.backgroundColor = ProductTheme.surface
         sourceScroll.borderType = .bezelBorder
         sourceView.delegate = self
         (sourceView as? SourceTextView)?.onImage = { [weak self] cg in self?.translateImage(cg) }
 
-        resultView.font = .systemFont(ofSize: 16)
+        resultView.font = .systemFont(ofSize: 17)
         resultView.isEditable = false
         resultView.isSelectable = true
         resultView.isRichText = false
-        resultView.textContainerInset = NSSize(width: 6, height: 8)
+        resultView.textContainerInset = NSSize(width: 12, height: 10)
         resultView.drawsBackground = false
         resultScroll.drawsBackground = false
         resultScroll.borderType = .noBorder
@@ -289,6 +300,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
         translateButton.toolTip = "粘贴或打字后会自动翻译；也可以把截图粘贴（⌘V）或拖进上面的框，自动识别图上的字再翻译"
         speakButton.target = self; speakButton.action = #selector(speak)
         let copyButton = NSButton(title: "复制译文", target: self, action: #selector(copyResult))
+        ProductTheme.primary(copyButton)
         pinButton.setButtonType(.pushOnPushOff)
         pinButton.target = self; pinButton.action = #selector(togglePin)
         for b in [translateButton, speakButton, copyButton, pinButton] {
@@ -314,14 +326,12 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
         row2.orientation = .horizontal
         row2.distribution = .fill
 
-        let separator = NSBox(); separator.boxType = .separator
-
-        let stack = NSStackView(views: [sourceScroll, row1, separator, resultScroll, row2])
+        let stack = NSStackView(views: [header, sourceLabel, sourceScroll, row1, resultLabel, resultScroll, row2])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 8
+        stack.spacing = 10
         stack.distribution = .fill
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 20, right: 24)
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -330,14 +340,14 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
             stack.topAnchor.constraint(equalTo: content.topAnchor),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
-        for v in [sourceScroll, row1, separator, resultScroll, row2] as [NSView] {
+        for v in [header, sourceScroll, row1, resultScroll, row2] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
-            v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24).isActive = true
+            v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
         }
         sourceScroll.heightAnchor.constraint(equalToConstant: 92).isActive = true
         resultScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
         resultScroll.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
-        for v in [row1, row2, separator, sourceScroll] as [NSView] {
+        for v in [header, sourceLabel, resultLabel, row1, row2, sourceScroll] as [NSView] {
             v.setContentHuggingPriority(.defaultHigh, for: .vertical)
         }
     }
@@ -391,7 +401,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
                 guard let self = self, !Task.isCancelled else { return }
                 self.resultView.string = r.text
                 let ms = Int(Date().timeIntervalSince(started) * 1000)
-                self.statusLabel.stringValue = "\(r.engine.name) · \(r.toChinese ? "英→中" : "中→英") · \(ms) ms"
+                self.statusLabel.stringValue = "\(r.engine.name) · \(r.toChinese ? "外文→中文" : "中文→英文") · \(ms) 毫秒"
             } catch {
                 guard let self = self, !Task.isCancelled else { return }
                 self.resultView.string = "翻译没成功。\n\n\(error.localizedDescription)\n\n可以检查一下网络，或在右上角换一个翻译引擎再试。也可以在菜单栏「译」→「下载离线翻译包」，以后不联网也能秒翻。"
@@ -454,6 +464,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
     @objc private func togglePin() {
         pinned = pinButton.state == .on
         pinButton.title = pinned ? "已固定" : "固定"
+        ProductTheme.styleButton(pinButton)
     }
 
     private func closeAndReturn() {
@@ -489,13 +500,16 @@ enum Toast {
             p.ignoresMouseEvents = true
             p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             let v = NSVisualEffectView()
-            v.material = .hudWindow
+            v.material = .popover
+            v.appearance = NSAppearance(named: .aqua)
             v.state = .active
             v.wantsLayer = true
-            v.layer?.cornerRadius = 8
+            v.layer?.cornerRadius = 10
+            v.layer?.borderWidth = 1
+            v.layer?.borderColor = ProductTheme.line.cgColor
             let l = NSTextField(labelWithString: "")
             l.font = .systemFont(ofSize: 13, weight: .medium)
-            l.textColor = .labelColor
+            l.textColor = ProductTheme.ink
             l.translatesAutoresizingMaskIntoConstraints = false
             v.addSubview(l)
             NSLayoutConstraint.activate([
@@ -582,6 +596,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         LanguagePack.remindIfNeeded()
         refreshLoginItemState()
+        if !d.bool(forKey: "creamGoldIntroduced"), #available(macOS 14.0, *), let st = screenTranslator as? ScreenTranslator, st.orbVisible {
+            d.set(true, forKey: "creamGoldIntroduced")
+            st.toggleTools()
+        }
     }
 
     private func buildMainMenu() {
@@ -602,6 +620,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
+        let toolsItem = NSMenuItem(title: "工具", action: nil, keyEquivalent: "")
+        let tools = NSMenu(title: "工具")
+        for (title, action) in [("打开工具面板", #selector(menuToolbox)), ("翻译框", #selector(menuInput)), ("截图中转站", #selector(menuShelf)), ("视频下载", #selector(menuDownload)), ("片段截取", #selector(menuClip))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; tools.addItem(item)
+        }
+        toolsItem.submenu = tools; main.addItem(toolsItem)
         NSApp.mainMenu = main
     }
 
@@ -621,13 +645,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             m.addItem(it)
             return it
         }
+        _ = add("打开工具面板", #selector(menuToolbox))
+        m.addItem(.separator())
         _ = add("全屏翻译 开 / 关", #selector(toggleScreenTranslate), "t", .option)
         _ = add("输入框：中文 → 英文", #selector(menuField), "e", .option)
         _ = add("截图中转站", #selector(menuShelf), "z", .option)
         _ = add("截一张存进中转站", #selector(menuShoot), "x", .option)
         _ = add("视频下载（无水印原画质）", #selector(menuDownload), "v", .option)
         _ = add("片段截取（原画质 / 去水印）", #selector(menuClip), "c", .option)
-        orbItem = add("显示桌面小圆球", #selector(toggleOrb))
+        orbItem = add("显示桌面悬浮入口", #selector(toggleOrb))
         m.addItem(.separator())
         _ = add("翻译选中文字", #selector(menuSelection), "d", .option)
         _ = add("截图翻译", #selector(menuScreen), "s", .option)
@@ -689,6 +715,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func menuShelf() { shelf.toggle() }
     @objc private func menuDownload() { downloader.show() }
     @objc private func menuClip() { ClipEditor.shared.show() }
+    @objc private func menuToolbox() {
+        if #available(macOS 14.0, *), let st = screenTranslator as? ScreenTranslator { st.toggleTools() }
+    }
 
     /// 菜单栏上单独的一键按钮：点一下整个屏幕变中文，再点一下恢复
     private var screenButton: NSStatusItem?
@@ -707,7 +736,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         b.attributedTitle = NSAttributedString(string: title, attributes: [
             .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
             .foregroundColor: on ? NSColor.white : NSColor.labelColor,
-            .backgroundColor: on ? NSColor.systemBlue : NSColor.clear,
+            .backgroundColor: on ? ProductTheme.gold : NSColor.clear,
         ])
         b.toolTip = on ? "点一下恢复原文（⌥T）" : "点一下：屏幕上看到的外文全部变成中文（⌥T）"
     }

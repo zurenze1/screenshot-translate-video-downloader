@@ -381,6 +381,17 @@ final class OrbView: NSView {
     private var dragged = false
     private var angle: CGFloat = 0
     private var spinTimer: Timer?
+    private var hover = false
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let a = hoverArea { removeTrackingArea(a) }
+        let a = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(a); hoverArea = a
+    }
+    override func mouseEntered(with event: NSEvent) { hover = true; needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hover = false; needsDisplay = true }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -402,7 +413,7 @@ final class OrbView: NSView {
         if isOn || busy || failed {
             let d: CGFloat = 20
             let c = NSRect(x: bounds.maxX - d - 1, y: bounds.minY + 1, width: d, height: d)
-            (failed ? NSColor.systemRed : NSColor.systemBlue).setFill()
+            (failed ? NSColor.systemRed : ProductTheme.gold).setFill()
             NSBezierPath(ovalIn: c).fill()
             NSColor.white.setStroke()
             let ring = NSBezierPath(ovalIn: c.insetBy(dx: 0.75, dy: 0.75)); ring.lineWidth = 1.5; ring.stroke()
@@ -426,41 +437,21 @@ final class OrbView: NSView {
             return
         }
         let r = bounds.insetBy(dx: 4, dy: 4)
-        let circle = NSBezierPath(ovalIn: r)
-        let top: NSColor, bottom: NSColor
-        if isOn {
-            top = NSColor(srgbRed: 0.45, green: 0.88, blue: 1.0, alpha: 0.97)
-            bottom = NSColor(srgbRed: 0.22, green: 0.42, blue: 0.95, alpha: 0.97)
-        } else {
-            top = NSColor(srgbRed: 0.42, green: 0.33, blue: 0.86, alpha: 0.95)
-            bottom = NSColor(srgbRed: 0.13, green: 0.12, blue: 0.36, alpha: 0.95)
-        }
-        NSGradient(starting: top, ending: bottom)?.draw(in: circle, angle: -90)
-        NSColor(white: 1, alpha: 0.25).setStroke()
-        circle.lineWidth = 1
-        circle.stroke()
-
-        if busy || failed {
+        let capsule = NSBezierPath(roundedRect: r, xRadius: 16, yRadius: 16)
+        NSGradient(starting: ProductTheme.surface, ending: ProductTheme.paper)?.draw(in: capsule, angle: -80)
+        (hover ? ProductTheme.gold.withAlphaComponent(0.85) : ProductTheme.line).setStroke()
+        capsule.lineWidth = hover ? 1.3 : 0.8; capsule.stroke()
+        ProductTheme.drawMark(in: NSRect(x: 12, y: bounds.midY - 16, width: 32, height: 32))
+        let title = isOn ? "中文已开" : "工具面板"
+        (title as NSString).draw(at: NSPoint(x: 51, y: bounds.midY + 1), withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: ProductTheme.ink])
+        ((busy ? "正在翻译…" : "译 · 截 · 存") as NSString).draw(at: NSPoint(x: 51, y: bounds.midY - 13), withAttributes: [.font: NSFont.systemFont(ofSize: 8.5), .foregroundColor: ProductTheme.muted])
+        if busy || isOn || failed {
             let ring = NSBezierPath()
-            let c = NSPoint(x: bounds.midX, y: bounds.midY)
-            ring.appendArc(withCenter: c, radius: r.width / 2 - 2,
-                           startAngle: failed ? 0 : angle, endAngle: failed ? 360 : angle + 100)
-            (failed ? NSColor.systemRed : NSColor.white).setStroke()
-            ring.lineWidth = 2.5
-            ring.lineCapStyle = .round
-            ring.stroke()
+            ring.appendArc(withCenter: NSPoint(x: 28, y: bounds.midY), radius: 17.5, startAngle: busy ? angle : 0, endAngle: busy ? angle + 105 : 360)
+            (failed ? NSColor.systemRed : ProductTheme.gold).setStroke()
+            ring.lineWidth = 1.5; ring.lineCapStyle = .round; ring.stroke()
         }
-
         drawBadge()
-
-        let title = isOn ? "原" : "译"
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 20, weight: .semibold),
-            .foregroundColor: NSColor.white,
-        ]
-        let s = title as NSString
-        let sz = s.size(withAttributes: attrs)
-        s.draw(at: NSPoint(x: bounds.midX - sz.width / 2, y: bounds.midY - sz.height / 2), withAttributes: attrs)
     }
 
     private func drawBadge() {
@@ -470,7 +461,7 @@ final class OrbView: NSView {
             let ts = (t as NSString).size(withAttributes: ba)
             let bw = max(17, ts.width + 8)
             let br = NSRect(x: bounds.maxX - bw - 1, y: bounds.maxY - 18, width: bw, height: 17)
-            NSColor.systemRed.setFill()
+            ProductTheme.gold.setFill()
             NSBezierPath(roundedRect: br, xRadius: 8.5, yRadius: 8.5).fill()
             (t as NSString).draw(at: NSPoint(x: br.midX - ts.width / 2, y: br.midY - ts.height / 2), withAttributes: ba)
         }
@@ -556,7 +547,20 @@ final class ScreenTranslator: NSObject {
     /// 开关状态变化（菜单栏按钮跟着变）
     var onStateChange: ((Bool) -> Void)?
     var orbFrame: NSRect { orbPanel.frame }
-    func setBadge(_ n: Int) { orb.badge = n }
+    func setBadge(_ n: Int) { orb.badge = n; toolbox.update(isOn: isOn, screenshots: n) }
+    private lazy var toolbox: ToolboxController = {
+        let t = ToolboxController()
+        t.onTranslate = { [weak self] in self?.onOpenPanel?() }
+        t.onShelf = { [weak self] in self?.onOpenShelf?() }
+        t.onDownload = { [weak self] in self?.onOpenDownloader?(nil) }
+        t.onClip = { [weak self] in self?.onOpenClip?() }
+        t.onScreen = { [weak self] in self?.toggle() }
+        t.onShoot = { ShelfShooter.shoot() }
+        t.onField = { [weak self] in self?.onTranslateField?() }
+        t.onAvatar = { [weak self] in self?.menuAvatar() }
+        t.onMore = { [weak self] in self?.showOrbMenu(nil) }
+        return t
+    }()
     private var cache: [String: String] = [:]
     private var monitors: [Any] = []
     private var pending: DispatchWorkItem?
@@ -578,7 +582,7 @@ final class ScreenTranslator: NSObject {
         orbPanel.hidesOnDeactivate = false
         orbPanel.contentView = orb
         orb.toolTip = "点一下选功能：整屏翻译 / 输入框中文变英文 / 翻译框 / 视频下载 / 截图中转站。拖动可移动；图片拖上来存进中转站，视频链接拖上来直接下载。"
-        orb.onClick = { [weak self] in self?.showOrbMenu(nil) }
+        orb.onClick = { [weak self] in self?.toggleTools() }
         orb.onMoved = { [weak self] in self?.saveOrbPosition() }
         orb.onMenu = { [weak self] e in self?.showOrbMenu(e) }
         orb.registerForDraggedTypes([.fileURL, .URL, .string])
@@ -595,13 +599,17 @@ final class ScreenTranslator: NSObject {
     func applyAvatar() {
         let img = Avatar.current
         orb.avatar = img
-        let side: CGFloat = img == nil ? 60 : 84
+        let size = img == nil ? NSSize(width: 120, height: 58) : NSSize(width: 84, height: 84)
         var f = orbPanel.frame
         let center = NSPoint(x: f.midX, y: f.midY)
-        f.size = NSSize(width: side, height: side)
-        f.origin = NSPoint(x: center.x - side / 2, y: center.y - side / 2)
+        f.size = size
+        f.origin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
+        if let vf = orbPanel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+            f.origin.x = min(max(f.origin.x, vf.minX + 5), vf.maxX - size.width - 5)
+            f.origin.y = min(max(f.origin.y, vf.minY + 5), vf.maxY - size.height - 5)
+        }
         orbPanel.setFrame(f, display: true)
-        orb.frame = NSRect(x: 0, y: 0, width: side, height: side)
+        orb.frame = NSRect(origin: .zero, size: size)
         orbPanel.hasShadow = img == nil
     }
 
@@ -627,7 +635,8 @@ final class ScreenTranslator: NSObject {
     }
 
     func showOrb() { orbPanel.orderFrontRegardless() }
-    func hideOrb() { orbPanel.orderOut(nil) }
+    func hideOrb() { orbPanel.orderOut(nil); toolbox.panel.orderOut(nil) }
+    func toggleTools() { toolbox.update(isOn: isOn, screenshots: orb.badge); toolbox.toggle(near: orbFrame) }
 
     private func showOrbMenu(_ e: NSEvent?) {
         let m = NSMenu()
@@ -648,8 +657,8 @@ final class ScreenTranslator: NSObject {
         item("截一张存进中转站", #selector(menuShoot), "x")
         m.addItem(.separator())
         item("换个形象（用自己的图片）…", #selector(menuAvatar))
-        if Avatar.current != nil { item("恢复默认圆球", #selector(menuAvatarReset)) }
-        item("隐藏小圆球", #selector(menuHide))
+        if Avatar.current != nil { item("恢复奶油金胶囊", #selector(menuAvatarReset)) }
+        item("隐藏悬浮入口", #selector(menuHide))
         let q = NSMenuItem(title: "退出截图翻译视频下载", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         m.addItem(q)
         // 菜单弹在小球左边，不挡住小球
@@ -700,6 +709,7 @@ final class ScreenTranslator: NSObject {
         }
         isOn = true
         orb.isOn = true
+        toolbox.update(isOn: true, screenshots: orb.badge)
         onStateChange?(true)
         RunLog.write("整屏翻译：开")
         orb.failed = false
@@ -729,6 +739,7 @@ final class ScreenTranslator: NSObject {
     func stop() {
         isOn = false
         orb.isOn = false
+        toolbox.update(isOn: false, screenshots: orb.badge)
         onStateChange?(false)
         orb.busy = false
         orb.failed = false
