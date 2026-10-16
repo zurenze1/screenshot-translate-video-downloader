@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>截图翻译视频下载 · 发布会</title>
+<meta name="description" content="祖仁泽的 Mac 小工具发布讲解：一键整屏中文、截图中转站、只下载几秒的片段截取、去水印与字幕三选一。演示画面来自开源电影《Tears of Steel》，处理效果为软件实际输出。">
+<meta name="theme-color" content="#070707">
+<meta property="og:title" content="截图翻译视频下载 · 发布会">
+<meta property="og:description" content="看懂。截下。留住。一个 Mac 小工具的发布讲解。">
+<meta property="og:image" content="media/opener_poster.jpg">
+<link rel="icon" href="../assets/mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="keynote.css">
+</head>
+<body>
+<div id="viewport"><div id="stage">
+
+  <!-- 00 开场 -->
+  <section class="slide" id="s-open" data-chapter="intro" aria-label="开场">
+    <div class="cine"><video src="media/opener.mp4" poster="media/opener_poster.jpg" muted loop playsinline preload="auto"></video></div>
+    <div class="bar-label t1">截图翻译视频下载 —— 产品发布</div>
+    <div class="bar-label t2">祖仁泽 · 2026.10.16</div>
+    <div class="bar-label t3" id="open-tc">TC 00:00:00:00</div>
+    <div class="bar-label t4">按 → 开始</div>
+    <div class="open-title">
+      <div class="words"><span>看懂。</span><span>截下。</span><span>留住。</span></div>
+      <p class="sub">一个 MAC 小工具 · 翻译 · 截图 · 视频</p>
+    </div>
+  </section>
+
+  <!-- 01 麻烦 -->
+  <section class="slide" id="s-pain" data-chapter="intro" data-steps="1" aria-label="从我的麻烦开始">
+    <div class="head">
+      <p class="eyebrow" data-in>做内容的时候</p>
+      <h2 class="display" data-in style="--d:120">总被这三件小事打断。</h2>
+    </div>
+    <div class="tri">
+      <div class="card" data-in style="--d:250"><img src="media/still_10.jpg" alt="电影《Tears of Steel》剧照：女主角特写"><div class="txt"><p class="n">01 · 看英文</p><h3>来回复制翻译</h3><p>一句一句搬进翻译软件，再切回来。</p></div></div>
+      <div class="card" data-in style="--d:400"><img src="media/still_09.jpg" alt="电影《Tears of Steel》剧照：全息光穹"><div class="txt"><p class="n">02 · 截了图</p><h3>满桌面去找</h3><p>截得越多，桌面越乱，挑几张都费劲。</p></div></div>
+      <div class="card" data-in style="--d:550"><img src="media/still_08.jpg" alt="电影《Tears of Steel》剧照：橙色网格特效"><div class="txt"><p class="n">03 · 好动效</p><h3>只想要那几秒</h3><p>却得下载整条，再进剪辑软件找。</p></div></div>
+    </div>
+    <div class="reveal" data-step="1">
+      <div>
+        <img src="media/icon.png" alt="软件图标：金色取景框和播放键">
+        <h2 class="display">把零碎操作，<br>留给<em>一个</em>小工具。</h2>
+        <p class="lede">名字很直白：<b>截图翻译视频下载</b>。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 翻译 -->
+  <section class="slide" id="s-translate" data-chapter="translate" data-steps="1" aria-label="让英文先变成中文">
+    <div class="col-left">
+      <p class="eyebrow" data-in>01 · 翻译</p>
+      <h2 class="display" data-in style="--d:120">外语，<br>一键<em>成中文</em>。</h2>
+      <p class="lede" data-in style="--d:240">屏幕上看到的外文，就地盖上中文。滚动、换镜头，自动跟着翻。</p>
+    </div>
+    <div class="ctrl" data-in style="--d:360">
+      <button class="pill" id="tr-toggle" aria-pressed="false">全屏中文 <span class="k">⌥T</span></button>
+      <p class="note">点一下试试。再点一下，恢复原文。</p>
+    </div>
+    <div class="frame" id="tr-frame" data-in style="--d:200">
+      <i class="c3"></i><i class="c4"></i>
+      <div class="screen">
+        <video src="media/dialog.mp4" poster="media/dialog_poster.jpg" muted loop playsinline preload="auto"></video>
+        <div class="subline"><span class="en"></span><span class="zh"></span></div>
+        <div class="scan"></div>
+        <div class="engine-tag">本机识别 · 翻译</div>
+      </div>
+      <div class="frame-meta"><span>TEARS OF STEEL · 05:15</span><span id="tr-tc">00:00:00:00</span></div>
+    </div>
+    <div class="minipanel" data-step="1">
+      <div><p class="lab">粘贴进翻译框</p><p class="src" id="mp-src"></p></div>
+      <div class="arrow">→</div>
+      <div><p class="lab">自动出结果 · 不用点按钮</p><p class="dst" id="mp-dst"></p></div>
+    </div>
+    <p class="credit">画面：《Tears of Steel》© Blender Foundation，CC BY 3.0。中文为本软件翻译引擎今天的实际输出，原样未改。</p>
+  </section>
+
+  <!-- 03 截图中转站 -->
+  <section class="slide" id="s-shelf" data-chapter="shelf" aria-label="截图中转站">
+    <div class="col-left">
+      <p class="eyebrow" data-in>02 · 截图</p>
+      <h2 class="display" data-in style="--d:120">截下来的，<br><em>一把</em>拿走。</h2>
+      <p class="lede" data-in style="--d:240">像在访达里一样：拉个框，选中几张，一起拖进聊天框或文档。</p>
+      <div class="hints" data-in style="--d:360">
+        <span><b>空白处</b>按住拖框</span><span>按住图片<b>拖走</b></span><span><b>Delete</b> 删除</span><span><b>⌘Z</b> 撤销</span><span><b>⌘A</b> 全选</span>
+      </div>
+    </div>
+    <div class="wall" id="wall" data-in style="--d:200" tabindex="0" aria-label="截图中转站示意：可框选、拖拽、删除">
+      <div class="wall-head"><span>截图中转站 · <span id="wall-count">14</span> 张</span><span id="wall-sel">还没选</span></div>
+      <div class="grid" id="grid"></div>
+      <div class="band" id="band"></div>
+    </div>
+    <div class="board" id="board" data-in style="--d:320">
+      <p class="lab">分镜板<br>拖到这里</p>
+      <div class="slots" id="slots"></div>
+    </div>
+  </section>
+
+  <!-- 04 片段截取 -->
+  <section class="slide" id="s-clip" data-chapter="clip" aria-label="好动效，只留那几秒">
+    <div class="col-left">
+      <p class="eyebrow" data-in>03 · 片段</p>
+      <h2 class="display" data-in style="--d:120">只要<br><em>那几秒</em>。</h2>
+      <p class="lede" data-in style="--d:240">贴上链接，在线预览。拖金色的起点、终点，只下载选中的这一段。</p>
+    </div>
+    <div class="ctrl" data-in style="--d:380">
+      <button class="pill" id="clip-export">导出这一段</button>
+    </div>
+    <div class="export-card" id="export-card">
+      <span id="export-state">正在只下载这一段…</span>
+      <div class="bar"><i id="export-bar"></i></div>
+      <p class="fname" id="export-name"></p>
+    </div>
+    <div class="frame" data-in style="--d:200">
+      <i class="c3"></i><i class="c4"></i>
+      <div class="screen"><video id="clip-video" src="media/vfx.mp4" poster="media/vfx_poster.jpg" muted playsinline preload="auto"></video></div>
+    </div>
+    <div class="strip" id="strip" data-in style="--d:300; background-image:url(media/vfx_strip.jpg)" aria-label="时间轴：拖动金色起点和终点">
+      <div class="shade" id="shade-l"></div><div class="shade" id="shade-r"></div>
+      <div class="range" id="range"></div>
+      <div class="handle in" id="h-in" role="slider" tabindex="0" aria-label="起点"></div>
+      <div class="handle out" id="h-out" role="slider" tabindex="0" aria-label="终点"></div>
+      <div class="playhead" id="playhead"></div>
+      <span class="tag" id="tag-in"></span><span class="tag" id="tag-out"></span>
+    </div>
+    <div class="readout" data-in style="--d:420">
+      <div class="big" id="clip-len">4.70<small>秒</small></div>
+      <div class="vs">
+        <p class="lab">整部影片 12 分 14 秒，这次只取 <b id="clip-len2">4.7 秒</b></p>
+        <div class="bar"><i id="clip-ratio"></i></div>
+        <p class="lab" id="clip-save">少下载约 99.4%（按时长估算）</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 去水印 -->
+  <section class="slide" id="s-wm" data-chapter="edit" aria-label="水印，一个不留">
+    <div class="col-left">
+      <p class="eyebrow" data-in>04 · 水印</p>
+      <h2 class="display" data-in style="--d:120">水印，<br><em>一个</em>不留。</h2>
+      <p class="lede" data-in style="--d:240">自动找角落里一直不动的标志；漏掉的，自己连续框。点错了，⌘Z。</p>
+    </div>
+    <div class="frame" data-in style="--d:200">
+      <i class="c3"></i><i class="c4"></i>
+      <div class="screen ba" id="wm-ba">
+        <video class="before" src="media/wm_before.mp4" poster="media/wm_before_poster.jpg" muted loop playsinline preload="auto"></video>
+        <div class="after"><video src="media/wm_after.mp4" poster="media/wm_after_poster.jpg" muted loop playsinline preload="auto"></video></div>
+        <span class="lbl l">原片</span><span class="lbl r">处理后</span>
+        <div class="sweep" id="wm-sweep"></div>
+        <div class="boxes" id="wm-boxes"></div>
+        <div class="divider" id="wm-div"><div class="knob" id="wm-knob" role="slider" tabindex="0" aria-label="前后对比">⇆</div></div>
+      </div>
+    </div>
+    <div class="ctrl" data-in style="--d:340">
+      <div class="btn-row">
+        <button class="pill small ghost" id="wm-auto">自动找水印</button>
+        <button class="pill small ghost" id="wm-draw">框选水印</button>
+        <button class="pill small ghost" id="wm-undo">↶ 撤销</button>
+      </div>
+      <button class="pill small" id="wm-erase">抹掉 <span class="k">导出</span></button>
+    </div>
+    <p class="status-line" id="wm-status" data-in style="--d:420">两处水印是演示加上的虚构标识。右侧「处理后」是软件<b>实际处理</b>的结果。</p>
+  </section>
+
+  <!-- 06 字幕 -->
+  <section class="slide" id="s-sub" data-chapter="edit" aria-label="字幕，留或不留">
+    <div class="col-left">
+      <p class="eyebrow" data-in>05 · 字幕</p>
+      <h2 class="display" data-in style="--d:120">字幕，<br>留不留，<em>你定</em>。</h2>
+      <p class="lede" data-in style="--d:240">自动找到字幕那一条。想要就留；不想要，抹掉或者裁掉。</p>
+    </div>
+    <div class="frame" id="sub-frame" data-in style="--d:200">
+      <i class="c3"></i><i class="c4"></i>
+      <div class="screen" id="sub-screen">
+        <div class="layer on" data-mode="keep"><video src="media/sub_keep.mp4" poster="media/sub_keep_poster.jpg" muted loop playsinline preload="auto"></video></div>
+        <div class="layer" data-mode="erase"><video src="media/sub_erase.mp4" poster="media/sub_erase_poster.jpg" muted loop playsinline preload="auto"></video></div>
+        <div class="layer crop" data-mode="crop"><video src="media/sub_crop.mp4" poster="media/sub_crop_poster.jpg" muted loop playsinline preload="auto"></video></div>
+        <div class="boxes" id="sub-boxes"></div>
+      </div>
+    </div>
+    <div class="ctrl" data-in style="--d:340">
+      <div class="seg" role="tablist" aria-label="字幕处理方式">
+        <button class="on" data-mode="keep" role="tab" aria-selected="true">保留字幕</button>
+        <button data-mode="erase" role="tab" aria-selected="false">抹掉字幕</button>
+        <button data-mode="crop" role="tab" aria-selected="false">裁掉那一条</button>
+      </div>
+      <span class="note">三个版本同步播放，切换即对比</span>
+    </div>
+    <div class="truth" data-in style="--d:420"><p class="t" id="sub-t">原样保留。</p><p class="d" id="sub-d">什么都不动，最安全。</p></div>
+    <p class="credit">画面：《Tears of Steel》© Blender Foundation，CC BY 3.0。英文字幕为官方字幕，演示时烧进画面；三个版本均为软件实际处理结果。</p>
+  </section>
+
+  <!-- 07 迭代故事 -->
+  <section class="slide" id="s-story" data-chapter="story" data-steps="6" aria-label="边用边改">
+    <div class="head">
+      <p class="eyebrow" data-in>从一句句抱怨里长出来</p>
+      <h2 class="display" data-in style="--d:120">它是被<em>用</em>出来的。</h2>
+    </div>
+    <div class="tl" id="tl">
+      <div class="rail" id="rail"></div>
+      <div class="node" data-step="1" style="left:0px"><p class="date">反馈 01</p><q>它现在不能一键翻译我的屏幕了。</q><p class="fix">查出免费翻译接口失效，<b>换成本机离线翻译 + 必应</b>，一句约 1 秒。</p></div>
+      <div class="node" data-step="2" style="left:279px"><p class="date">反馈 02</p><q>下载速度好慢呀。</q><p class="fix">原来下载没走代理：直连 30 KB/s，<b>走代理 1–6 MB/s</b>。</p></div>
+      <div class="node" data-step="3" style="left:558px"><p class="date">反馈 03</p><q>按住左键，框住我想要的。</q><p class="fix">截图中转站<b>框选、拖走、Delete 删除</b>。</p></div>
+      <div class="node" data-step="4" style="left:837px"><p class="date">反馈 04</p><q>我不想下整个视频。</q><p class="fix"><b>在线预览，只下载选中的几秒</b>，去水印同时完成。</p></div>
+      <div class="node" data-step="5" style="left:1116px"><p class="date">反馈 05</p><q>水印有的时候不止一个。</q><p class="fix"><b>连续框好几个</b>，单击删掉，自动识别多处。</p></div>
+      <div class="node" data-step="6" style="left:1394px"><p class="date">反馈 06</p><q>有时候想要字幕，有时候不想要。</q><p class="fix">字幕<b>保留 / 抹掉 / 裁掉</b>，自己选。</p></div>
+    </div>
+  </section>
+
+  <!-- 08 参数 -->
+  <section class="slide" id="s-specs" data-chapter="get" aria-label="几个数字">
+    <div class="head">
+      <p class="eyebrow" data-in>写在最后的几个数字</p>
+      <h2 class="display" data-in style="--d:120;font-size:88px;margin-top:26px">都是实测，不是口号。</h2>
+    </div>
+    <div class="specs">
+      <div class="spec" data-in style="--d:200"><p class="v">0<small>个账号</small></p><p class="k">不用注册，不用登录</p><p class="d">打开就能用，没有会员和广告。</p></div>
+      <div class="spec" data-in style="--d:280"><p class="v">本机</p><p class="k">识别、抠图、去水印</p><p class="d">截图文字识别、去水印、抠图都在你的 Mac 上完成。</p></div>
+      <div class="spec" data-in style="--d:360"><p class="v">6.3<small>秒</small></p><p class="k">整部电影 76 句对白翻完</p><p class="d">今天用《Tears of Steel》全片字幕实测，软件同款引擎。</p></div>
+      <div class="spec" data-in style="--d:440"><p class="v">8<small>路</small></p><p class="k">分片视频同时下载</p><p class="d">自动走系统代理，带 JS 运行环境解开 YouTube 限速。</p></div>
+      <div class="spec" data-in style="--d:520"><p class="v">25→29.5<small>MB</small></p><p class="k">去水印后几乎不变大</p><p class="d">直接替换原文件，只留一份；码率封顶在原片 1.3 倍。</p></div>
+      <div class="spec" data-in style="--d:600"><p class="v">MIT</p><p class="k">开源许可</p><p class="d">代码、安装步骤、使用说明，全部公开。</p></div>
+    </div>
+  </section>
+
+  <!-- 09 获取 -->
+  <section class="slide" id="s-get" data-chapter="get" aria-label="代码和使用方法都公开">
+    <img class="icon" src="media/icon.png" alt="软件图标" data-in>
+    <h2 class="display" data-in style="--d:120">把零碎操作，<br>留给<em>一个</em>小工具。</h2>
+    <p class="lede" data-in style="--d:240">免费 · 开源 · 苹果芯片 Mac · macOS 14 起<br>祖仁泽，和 AI 一起，边用边改出来的。</p>
+    <div class="btn-row" data-in style="--d:360">
+      <a class="pill" href="https://github.com/zurenze1/screenshot-translate-video-downloader" target="_blank" rel="noopener">打开 GitHub ↗</a>
+      <a class="pill ghost" href="../">产品介绍页</a>
+      <a class="pill ghost" href="../讲解逐字稿.md" target="_blank">逐字稿</a>
+    </div>
+    <div class="qr" data-in style="--d:300">
+      <div class="code"><img src="media/qr-github.svg" alt="GitHub 仓库二维码"></div>
+      <p class="u">扫码获取<br>github.com/zurenze1/<br>screenshot-translate-video-downloader</p>
+    </div>
+  </section>
+
+  <!-- 10 片尾字幕 -->
+  <section class="slide" id="s-credits" data-chapter="get" aria-label="片尾字幕">
+    <div class="roll">
+      <div class="blk"><p class="r">产品 · 设计 · 每一次吐槽</p><p class="n">祖仁泽</p></div>
+      <div class="blk"><p class="r">一起写代码</p><p class="n">Claude</p></div>
+      <div class="blk"><p class="r">演示影片</p><p class="n">Tears of Steel (2012)<small>© Blender Foundation · mango.blender.org · CC BY 3.0<br>本页片段经剪辑、静音；水印为演示添加的虚构标识</small></p></div>
+      <div class="blk"><p class="r">翻译</p><p class="n">苹果离线翻译 · 必应翻译</p></div>
+      <div class="blk"><p class="r">视频下载与处理</p><p class="n">yt-dlp · FFmpeg</p></div>
+      <div class="blk"><p class="r">文字识别 · 主体抠图</p><p class="n">Apple Vision</p></div>
+      <div class="blk"><p class="r">许可</p><p class="n">MIT</p></div>
+      <p class="end">谢谢。</p>
+    </div>
+  </section>
+
+</div></div>
+
+<div id="hud">
+  <div class="hud-top"><span id="chapter-label"><b>01</b> · 从我的麻烦开始</span><span><span id="hud-hint">← → 翻页 · N 讲述提示 · F 全屏</span></span></div>
+  <div class="progress" id="progress"></div>
+  <div class="nav"><button id="prev" aria-label="上一页">←</button><button id="notes-btn" aria-label="讲述提示">N</button><button id="fs-btn" aria-label="全屏">⤢</button><button id="next" aria-label="下一页">→</button></div>
+</div>
+<aside class="notes" id="notes" aria-live="polite"></aside>
+<div class="vignette"></div>
+<div class="grain"></div>
+<noscript><p style="position:fixed;left:20px;bottom:20px;z-index:99;color:#ccc">这个讲解需要启用脚本。<a href="../讲解逐字稿.md">点此看逐字稿</a>。</p></noscript>
+<script src="../talk-data.js"></script>
+<script src="keynote.js"></script>
+</body>
+</html>

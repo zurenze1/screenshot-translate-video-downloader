@@ -306,8 +306,9 @@
     const url=new URL(location.href);url.searchParams.delete('present');url.hash='';history.replaceState(null,'',url);
     window.scrollTo({top:previousScroll,behavior:'instant'});$('#present-toggle').focus({preventScroll:true});
   }
-  $('#present-toggle').addEventListener('click',()=>{if(presenting)exitPresent();else enterPresent();});
-  $('#present-bottom').addEventListener('click',()=>enterPresent());$('#exit-present').addEventListener('click',exitPresent);
+  // 讲解改用电影风格的发布会页面
+  $('#present-toggle').addEventListener('click',()=>{location.href='keynote/';});
+  $('#present-bottom')?.addEventListener('click',()=>{location.href='keynote/';});$('#exit-present').addEventListener('click',exitPresent);
   $('#prev-chapter').addEventListener('click',()=>setChapter(currentChapter-1));$('#next-chapter').addEventListener('click',()=>setChapter(currentChapter+1));
   $('#notes-toggle').addEventListener('click',()=>setNotes($('#speaker-notes').hidden));$('#notes-close').addEventListener('click',()=>setNotes(false));
   $$('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{
@@ -328,6 +329,6 @@
   setChapter(0);
   $('#page-progress').style.width='0%';
   const query=new URLSearchParams(location.search);
-  if(query.get('present')==='1')enterPresent(Math.max(0,talk.chapters.findIndex(c=>`#${c.id}`===location.hash)));
+  if(query.get('present')==='1')location.replace('keynote/');else if(false)enterPresent(Math.max(0,talk.chapters.findIndex(c=>`#${c.id}`===location.hash)));
   if(query.get('script')==='1')openScript();
 })();
