@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>截图翻译视频下载</string>
+	<string>工具箱</string>
 	<key>CFBundleExecutable</key>
 	<string>JietuFanyi</string>
 	<key>CFBundleIconFile</key>
@@ -11,18 +11,25 @@
 	<key>CFBundleIdentifier</key>
 	<string>com.zurenze.desktop-translator</string>
 	<key>CFBundleName</key>
-	<string>截图翻译视频下载</string>
+	<string>工具箱</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.2</string>
+	<string>3.2.1</string>
 	<key>CFBundleVersion</key>
-	<string>4</string>
+	<string>10</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>仅在你主动截图时读取屏幕，用于识别文字或保存截图。</string>
 </dict>
 </plist>

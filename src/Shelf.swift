@@ -1,75 +1,8 @@
-// 截图中转站：截图自动收进小球，之后可以一张、几张或全部拖到任何地方
+// 统一中转站：自动收集截图，保存文件与视频副本，批量取用。
 import Cocoa
 import Vision
 import ImageIO
-
-// MARK: - 存储
-
-final class ShelfStore {
-    static let shared = ShelfStore()
-    let dir: URL
-    private(set) var items: [URL] = []      // 新的在前
-    private var listeners: [() -> Void] = []
-    static let maxItems = 200
-
-    init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        dir = base.appendingPathComponent("桌面翻译器/截图中转站", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        reload()
-    }
-
-    func observe(_ f: @escaping () -> Void) { listeners.append(f) }
-
-    private func created(_ u: URL) -> Date {
-        (try? u.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-    }
-
-    func reload() {
-        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey],
-                                                                 options: [.skipsHiddenFiles])) ?? []
-        let exts: Set<String> = ["png", "jpg", "jpeg", "tiff", "tif", "heic", "gif", "webp"]
-        items = files.filter { exts.contains($0.pathExtension.lowercased()) }.sorted { created($0) > created($1) }
-        if items.count > ShelfStore.maxItems {
-            for u in items[ShelfStore.maxItems...] { try? FileManager.default.removeItem(at: u) }
-            items = Array(items.prefix(ShelfStore.maxItems))
-        }
-        DispatchQueue.main.async { self.listeners.forEach { $0() } }
-    }
-
-    private static let fmt: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH.mm.ss"; return f
-    }()
-
-    func uniqueURL(_ name: String) -> URL {
-        var u = dir.appendingPathComponent(name)
-        let base = u.deletingPathExtension().lastPathComponent, ext = u.pathExtension
-        var i = 2
-        while FileManager.default.fileExists(atPath: u.path) {
-            u = dir.appendingPathComponent("\(base) \(i).\(ext)"); i += 1
-        }
-        return u
-    }
-
-    func newShotURL() -> URL { uniqueURL("截图 \(ShelfStore.fmt.string(from: Date())).png") }
-
-    /// 复制一份进来（原文件不动）
-    func add(copyOf src: URL) {
-        guard src.deletingLastPathComponent().standardizedFileURL != dir.standardizedFileURL else { return }
-        let dst = uniqueURL(src.lastPathComponent)
-        do { try FileManager.default.copyItem(at: src, to: dst) } catch { NSLog("shelf add: \(error)"); return }
-        reload()
-    }
-
-    func remove(_ urls: [URL]) {
-        for u in urls where u.deletingLastPathComponent().standardizedFileURL == dir.standardizedFileURL {
-            // 放进废纸篓，删错了还能找回来
-            if (try? FileManager.default.trashItem(at: u, resultingItemURL: nil)) == nil { try? FileManager.default.removeItem(at: u) }
-        }
-        ThumbCache.forget(urls)
-        reload()
-    }
-}
+import QuickLookThumbnailing
 
 // MARK: - 自动收集系统截图（⌘⇧3 / ⌘⇧4 / ⌘⇧5）
 
@@ -99,7 +32,7 @@ final class ScreenshotWatcher: NSObject {
             let created = item.value(forAttribute: NSMetadataItemFSCreationDateKey) as? Date ?? .distantPast
             // 只收软件启动之后的新截图
             if created > startedAt.addingTimeInterval(-2) {
-                ShelfStore.shared.add(copyOf: URL(fileURLWithPath: path))
+                ShelfStore.shared.importFiles([URL(fileURLWithPath: path)]) { _, _ in }
             }
         }
     }
@@ -109,15 +42,31 @@ final class ScreenshotWatcher: NSObject {
 
 enum ThumbCache {
     private static var cache: [URL: NSImage] = [:]
+    private static var requested = Set<URL>()
 
     static func image(_ u: URL) -> NSImage? {
         if let c = cache[u] { return c }
+        if RelayKind.of(u) != .image {
+            let icon = NSWorkspace.shared.icon(forFile: u.path)
+            cache[u] = icon
+            if requested.insert(u).inserted {
+                let request = QLThumbnailGenerator.Request(fileAt: u, size: NSSize(width: 320, height: 220), scale: 2, representationTypes: .thumbnail)
+                QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
+                    guard let rep else { return }
+                    DispatchQueue.main.async {
+                        cache[u] = rep.nsImage
+                        NotificationCenter.default.post(name: .init("relayThumbnailReady"), object: nil)
+                    }
+                }
+            }
+            return icon
+        }
         guard let src = CGImageSourceCreateWithURL(u as CFURL, nil),
               let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceThumbnailMaxPixelSize: 360,
                 kCGImageSourceCreateThumbnailWithTransform: true,
-              ] as CFDictionary) else { return nil }
+              ] as CFDictionary) else { return NSWorkspace.shared.icon(forFile: u.path) }
         let img = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         cache[u] = img
         return img
@@ -181,7 +130,10 @@ final class ThumbCell: NSView {
     init(url: URL) {
         self.url = url
         super.init(frame: .zero)
-        toolTip = url.deletingPathExtension().lastPathComponent + "\n双击用「预览」打开"
+        toolTip = url.lastPathComponent + "\n双击用默认应用打开 · 可拖到其他软件"
+        setAccessibilityElement(true); setAccessibilityRole(.button)
+        setAccessibilityLabel(url.lastPathComponent + "，" + RelayKind.of(url).title)
+        setAccessibilityHelp("单击选择，双击打开；按住拖出")
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -191,7 +143,7 @@ final class ThumbCell: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
-        let r = imageRect == .zero ? bounds.insetBy(dx: 10, dy: 10) : imageRect.insetBy(dx: -2, dy: -2)
+        let r = bounds.insetBy(dx: 3, dy: 3)
         return r.contains(p) ? self : nil
     }
 
@@ -201,7 +153,7 @@ final class ThumbCell: NSView {
         ProductTheme.surface.setFill()
         bg.fill()
         if let img = ThumbCache.image(url) {
-            let area = r.insetBy(dx: 5, dy: 5)
+            let area = NSRect(x: r.minX + 8, y: r.minY + 8, width: r.width - 16, height: r.height - 49)
             let s = min(area.width / img.size.width, area.height / img.size.height)
             let w = img.size.width * s, h = img.size.height * s
             let ir = NSRect(x: area.midX - w / 2, y: area.midY - h / 2, width: w, height: h)
@@ -211,6 +163,12 @@ final class ThumbCell: NSView {
             img.draw(in: ir, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             NSGraphicsContext.restoreGraphicsState()
         }
+        let name = NSRect(x: r.minX + 10, y: r.maxY - 36, width: r.width - 20, height: 17)
+        let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingMiddle
+        (url.lastPathComponent as NSString).draw(in: name, withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: ProductTheme.ink, .paragraphStyle: style])
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let info = RelayKind.of(url).title + " · " + ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+        (info as NSString).draw(in: NSRect(x: r.minX + 10, y: r.maxY - 19, width: r.width - 20, height: 13), withAttributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: ProductTheme.muted])
         if selected {
             ProductTheme.gold.setStroke()
             bg.lineWidth = 3
@@ -264,9 +222,18 @@ final class ShelfGrid: FlippedView {
         super.init(frame: frame)
         band.isHidden = true
         addSubview(band)
+        registerForDraggedTypes([.fileURL])
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        sender.draggingSource is ShelfController ? [] : .copy
+    }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        guard !urls.isEmpty else { return false }
+        RelayImport.receive(urls); return true
+    }
     override var acceptsFirstResponder: Bool { true }
     override var needsPanelToBecomeKey: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -321,12 +288,19 @@ final class BandView: NSView {
 
 // MARK: - 中转站窗口
 
-final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
+final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate, NSSearchFieldDelegate {
     let panel: NSPanel
     private let scroll = NSScrollView()
     private let grid = ShelfGrid()
     private let titleLabel = NSTextField(labelWithString: "")
-    private let emptyLabel = NSTextField(wrappingLabelWithString: "")
+    private let emptyLabel = RelayEmptyView(frame: .zero)
+    private let filters = NSSegmentedControl(labels: ["全部", "图片", "视频", "文件"], trackingMode: .selectOne, target: nil, action: nil)
+    private let search = NSSearchField()
+    private var filter: RelayKind { RelayKind(rawValue: filters.selectedSegment) ?? .all }
+    private var visibleItems: [URL] {
+        let query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ShelfStore.shared.items.filter { (filter == .all || RelayKind.of($0) == filter) && (query.isEmpty || $0.lastPathComponent.localizedCaseInsensitiveContains(query)) }
+    }
     private var cells: [ThumbCell] = []
     private var selection = Set<URL>()
     private var anchor: URL?
@@ -334,18 +308,18 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
     var anchorFrame: (() -> NSRect?)?   // 小球的位置
 
     override init() {
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 580, height: 500),
-                        styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
+                        styleMask: [.titled, .closable, .resizable, .utilityWindow],
                         backing: .buffered, defer: false)
         super.init()
-        panel.title = "截图中转站"
+        panel.title = "中转站"
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
-        panel.becomesKeyOnlyIfNeeded = true
+        panel.becomesKeyOnlyIfNeeded = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 480, height: 380)
+        panel.minSize = NSSize(width: 660, height: 500)
         panel.delegate = self
         buildUI()
         ProductTheme.apply(to: panel)
@@ -363,7 +337,7 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
 
     private func buildUI() {
         let content = panel.contentView!
-        let header = ProductTheme.header("02 / 截图中转", "截完，下一秒就用上。", "在空白处框选，多张一起拖走。")
+        let header = ProductTheme.header("RELAY / 素材中转站", "先放这里，等会儿接着用。", "截图自动收集 · 文件与视频拖入 · 保存副本，原件不动")
         header.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(header)
         titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
@@ -371,7 +345,12 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let top = NSStackView(views: [titleLabel, spacer, button("全选", #selector(selectAll)), button("截一张 ⌥X", #selector(shoot))])
+        let top = NSStackView(views: [titleLabel, spacer, button("添加文件…", #selector(addFiles)), button("全选", #selector(selectAll)), button("截一张 ⌥X", #selector(shoot))])
+        filters.selectedSegment = 0; filters.selectedSegmentBezelColor = ToolboxArtwork.forest; filters.target = self; filters.action = #selector(filterChanged)
+        search.placeholderString = "搜索文件名"; search.delegate = self
+        search.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        let searchSpacer = NSView(); searchSpacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let filterBar = NSStackView(views: [filters, searchSpacer, search]); filterBar.spacing = 12
         top.orientation = .horizontal
         top.distribution = .fill
 
@@ -388,17 +367,14 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
         scroll.borderType = .noBorder
         scroll.documentView = grid
 
-        emptyLabel.stringValue = "还没有截图。\n\n用 ⌘⇧4 截图会自动收进来，或按 ⌥X 直接截一张。\n也可以把图片拖到小球上存进来。"
-        emptyLabel.alignment = .center
-        emptyLabel.textColor = .secondaryLabelColor
 
-        let hint = NSTextField(labelWithString: "在空白处按住拖出选框选多张；⌘ 点选；Delete 删除。选好后按住图片拖到想放的地方。")
+        let hint = NSTextField(labelWithString: "拖入文件保存副本 · 框选或 ⌘ 点选后一起拖出 · 双击打开 · Delete 移到废纸篓")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .tertiaryLabelColor
         hint.lineBreakMode = .byTruncatingTail
         hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        for v in [top, scroll, hint, bottom, emptyLabel] as [NSView] {
+        for v in [top, filterBar, scroll, hint, bottom, emptyLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
         }
@@ -409,7 +385,10 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
             top.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 16),
             top.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
             top.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
-            scroll.topAnchor.constraint(equalTo: top.bottomAnchor, constant: 6),
+            filterBar.topAnchor.constraint(equalTo: top.bottomAnchor, constant: 10),
+            filterBar.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            filterBar.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            scroll.topAnchor.constraint(equalTo: filterBar.bottomAnchor, constant: 12),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 6),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -6),
             hint.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 4),
@@ -422,9 +401,11 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
             emptyLabel.centerXAnchor.constraint(equalTo: scroll.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scroll.centerYAnchor),
             emptyLabel.widthAnchor.constraint(equalTo: scroll.widthAnchor, constant: -40),
+            emptyLabel.heightAnchor.constraint(equalToConstant: 220),
         ])
         NotificationCenter.default.addObserver(self, selector: #selector(layoutCells), name: NSView.frameDidChangeNotification, object: scroll)
         scroll.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: .init("relayThumbnailReady"), object: nil, queue: .main) { [weak self] _ in self?.cells.forEach { $0.needsDisplay = true } }
     }
 
     // MARK: 显示
@@ -444,11 +425,12 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
             } else { panel.center() }
         }
         reloadCells()
-        panel.orderFrontRegardless()
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(grid)
     }
 
     private func reloadCells() {
-        let items = ShelfStore.shared.items
+        let items = visibleItems
         selection = selection.filter { items.contains($0) }
         cells.forEach { $0.removeFromSuperview() }
         cells = items.map { u in
@@ -459,6 +441,7 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
             return c
         }
         emptyLabel.isHidden = !items.isEmpty
+        emptyLabel.filtered = !ShelfStore.shared.items.isEmpty
         updateTitle()
         layoutCells()
     }
@@ -467,7 +450,7 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
         let width = scroll.contentSize.width
         let gap: CGFloat = 10      // 格子之间留空，方便从空白处拖选框
         let cols = max(1, Int((width - gap) / 140))
-        let cw = (width - gap * CGFloat(cols + 1)) / CGFloat(cols), ch = cw * 0.68
+        let cw = (width - gap * CGFloat(cols + 1)) / CGFloat(cols), ch = cw * 0.68 + 43
         for (i, c) in cells.enumerated() {
             c.frame = NSRect(x: gap + CGFloat(i % cols) * (cw + gap), y: gap + CGFloat(i / cols) * (ch + gap), width: cw, height: ch)
         }
@@ -477,7 +460,8 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
 
     private func updateTitle() {
         let n = ShelfStore.shared.items.count
-        titleLabel.stringValue = selection.isEmpty ? "共 \(n) 张" : "共 \(n) 张 · 已选 \(selection.count) 张"
+        let busy = ShelfStore.shared.isImporting ? " · 正在存入…" : ""
+        titleLabel.stringValue = "共 \(n) 项 · 当前 \(visibleItems.count) 项" + (selection.isEmpty ? "" : " · 已选 \(selection.count) 项") + busy
         for c in cells { c.selected = selection.contains(c.url) }
     }
 
@@ -509,12 +493,12 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
     }
 
     @objc private func selectAll() {
-        let all = Set(ShelfStore.shared.items)
+        let all = Set(visibleItems)
         selection = selection == all ? [] : all
         updateTitle()
     }
 
-    private var selectedURLs: [URL] { ShelfStore.shared.items.filter { selection.contains($0) } }
+    private var selectedURLs: [URL] { visibleItems.filter { selection.contains($0) } }
 
     var currentSelection: Set<URL> { selection }
     func setSelection(_ s: Set<URL>) { selection = s; updateTitle() }
@@ -529,7 +513,7 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
     }
 
     func deleteSelectedFromKey() { deleteSelected() }
-    func selectAllFromKey() { selection = Set(ShelfStore.shared.items); updateTitle() }
+    func selectAllFromKey() { selection = Set(visibleItems); updateTitle() }
     func copyFromKey() { copySelected() }
 
     // MARK: 拖出去
@@ -556,24 +540,24 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
     // MARK: 按钮
 
     @objc private func copySelected() {
-        let urls = selectedURLs.isEmpty ? Array(ShelfStore.shared.items.prefix(1)) : selectedURLs
+        let urls = selectedURLs.isEmpty ? Array(visibleItems.prefix(1)) : selectedURLs
         guard !urls.isEmpty else { return }
         let pb = NSPasteboard.general
         pb.clearContents()
-        if urls.count == 1, let data = try? Data(contentsOf: urls[0]) {
+        if urls.count == 1, RelayKind.of(urls[0]) == .image, let image = NSImage(contentsOf: urls[0]), let data = image.tiffRepresentation {
             // 一张图：同时放图片数据和文件，粘到聊天框、文档、访达都行
             let item = NSPasteboardItem()
-            item.setData(data, forType: urls[0].pathExtension.lowercased() == "png" ? .png : .tiff)
+            item.setData(data, forType: .tiff)
             item.setString(urls[0].absoluteString, forType: .fileURL)
             pb.writeObjects([item])
         } else {
             pb.writeObjects(urls as [NSURL])
         }
-        Toast.show("已复制 \(urls.count) 张，可以 ⌘V 粘贴")
+        Toast.show("已复制 \(urls.count) 项，可以 ⌘V 粘贴")
     }
 
     @objc private func translateSelected() {
-        guard let u = selectedURLs.first ?? ShelfStore.shared.items.first else { return }
+        guard let u = selectedURLs.first ?? visibleItems.first, RelayKind.of(u) == .image else { Toast.show("请选择一张图片再识别文字"); return }
         Toast.show("正在识别图上的字…")
         ImageOCR.text(of: u) { [weak self] t in self?.onTranslate?(t) }
     }
@@ -585,10 +569,10 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
 
     @objc private func deleteSelected() {
         guard !selection.isEmpty else { NSSound.beep(); return }
-        let n = selection.count
-        ShelfStore.shared.remove(selectedURLs)
-        selection = []
-        Toast.show("已删除 \(n) 张（在废纸篓里能找回）")
+        let expected = selection.count
+        let n = ShelfStore.shared.remove(selectedURLs)
+        ThumbCache.forget(selectedURLs); selection = []
+        Toast.show(n == expected ? "已移除 \(n) 项，可从废纸篓恢复" : "已移除 \(n) 项，部分文件未能移除，已保留")
     }
 
     @objc private func clearAll() {
@@ -596,17 +580,27 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate {
         guard n > 0 else { return }
         NSApp.activate(ignoringOtherApps: true)
         let a = NSAlert()
-        a.messageText = "清空中转站里的 \(n) 张截图？"
-        a.informativeText = "只删除中转站里的副本（放进废纸篓），桌面上原来的截图不受影响。"
+        a.messageText = "清空中转站里的 \(n) 项？"
+        a.informativeText = "将全部分类中的副本移到废纸篓。原文件不受影响。"
         a.addButton(withTitle: "清空")
         a.addButton(withTitle: "取消")
         if a.runModal() == .alertFirstButtonReturn {
-            ShelfStore.shared.remove(ShelfStore.shared.items)
+            let removed = ShelfStore.shared.remove(ShelfStore.shared.items)
             selection = []
+            Toast.show("已移除 \(removed) 项；未能移除的文件继续保留")
         }
     }
 
-    @objc func shoot() { ShelfShooter.shoot() }
+    @objc private func filterChanged() { selection = []; reloadCells() }
+    func controlTextDidChange(_ obj: Notification) { selection = []; reloadCells() }
+    @objc private func addFiles() {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+        let picker = NSOpenPanel(); picker.title = "存入中转站"; picker.prompt = "保存副本"
+        picker.allowsMultipleSelection = true; picker.canChooseDirectories = false; picker.canChooseFiles = true
+        picker.beginSheetModal(for: panel) { response in if response == .OK { DispatchQueue.main.async { RelayImport.receive(picker.urls) } } }
+    }
+    @objc func shoot() { panel.orderOut(nil); DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { ShelfShooter.shoot() } }
 }
 
 // MARK: - 直接截一张存进中转站（不经过桌面）
@@ -621,7 +615,7 @@ enum ShelfShooter {
             DispatchQueue.main.async {
                 if FileManager.default.fileExists(atPath: url.path) {
                     ShelfStore.shared.reload()
-                    Toast.show("已存进截图中转站")
+                    Toast.show("已存进中转站")
                 }
             }
         }

@@ -1,4 +1,4 @@
-// 截图翻译视频下载 —— 菜单栏常驻的翻译 + 截图中转站 + 视频下载小工具
+// 工具箱 —— 菜单栏常驻的翻译 + 中转站 + 视频下载小工具
 // ⌥D 翻译选中文字   ⌥S 截图识别并翻译   ⌥A 打开输入框翻译   ⌥V 视频下载
 import Cocoa
 import Carbon
@@ -535,7 +535,7 @@ enum Toast {
 
 // MARK: - 菜单栏 & 应用入口
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var panel: PanelController!
     private var loginItem: NSMenuItem?
@@ -556,13 +556,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         watcher.start()
         if #available(macOS 14.0, *) {
-            let st = ScreenTranslator()
+            let st = ToolboxHubController()
             st.onTranslateField = { [weak self] in self?.translateFocusedField() }
             st.onOpenPanel = { [weak self] in self?.inputTranslate() }
             st.onOpenShelf = { [weak self] in self?.shelf.toggle() }
             st.onOpenDownloader = { [weak self] link in self?.downloader.show(link: link) }
             st.onOpenClip = { ClipEditor.shared.show() }
-            st.onStateChange = { [weak self] on in self?.updateScreenButton(on) }
             shelf.anchorFrame = { [weak st] in st?.orbVisible == true ? st?.orbFrame : nil }
             st.setBadge(ShelfStore.shared.items.count)
             ShelfStore.shared.observe { [weak st] in st?.setBadge(ShelfStore.shared.items.count) }
@@ -570,7 +569,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if !UserDefaults.standard.bool(forKey: "orbHidden") { st.showOrb() }
         }
         buildStatusItem()
-        buildScreenButton()
 
         let opt = Int(optionKey)
         var failed: [String] = []
@@ -582,7 +580,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !HotKeyCenter.shared.register(id: 7, keyCode: kVK_ANSI_Z, modifiers: opt, handler: { [weak self] in self?.shelf.toggle() }) { failed.append("⌥Z") }
         if !HotKeyCenter.shared.register(id: 8, keyCode: kVK_ANSI_V, modifiers: opt, handler: { [weak self] in self?.downloader.show() }) { failed.append("⌥V") }
         if !HotKeyCenter.shared.register(id: 9, keyCode: kVK_ANSI_C, modifiers: opt, handler: { ClipEditor.shared.show() }) { failed.append("⌥C") }
-        if !HotKeyCenter.shared.register(id: 4, keyCode: kVK_ANSI_T, modifiers: opt, handler: { [weak self] in self?.toggleScreenTranslate() }) { failed.append("⌥T") }
         if !failed.isEmpty {
             alert("有快捷键被别的软件占用了：\(failed.joined(separator: "、"))", "可以先用菜单栏「译」里的菜单项。")
         }
@@ -594,9 +591,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if !AXIsProcessTrusted() { requestAccessibility() }
             panel.show(text: "Welcome! Select any English text in any app and press Option + D to translate it.")
         }
-        LanguagePack.remindIfNeeded()
         refreshLoginItemState()
-        if !d.bool(forKey: "creamGoldIntroduced"), #available(macOS 14.0, *), let st = screenTranslator as? ScreenTranslator, st.orbVisible {
+        if !d.bool(forKey: "creamGoldIntroduced"), #available(macOS 14.0, *), let st = screenTranslator as? ToolboxHubController, st.orbVisible {
             d.set(true, forKey: "creamGoldIntroduced")
             st.toggleTools()
         }
@@ -608,7 +604,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let appItem = NSMenuItem(); main.addItem(appItem)
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        appMenu.addItem(withTitle: "退出截图翻译视频下载", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出工具箱", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         let editItem = NSMenuItem(); main.addItem(editItem)
         let edit = NSMenu(title: "编辑")
@@ -622,7 +618,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         editItem.submenu = edit
         let toolsItem = NSMenuItem(title: "工具", action: nil, keyEquivalent: "")
         let tools = NSMenu(title: "工具")
-        for (title, action) in [("打开工具面板", #selector(menuToolbox)), ("翻译框", #selector(menuInput)), ("截图中转站", #selector(menuShelf)), ("视频下载", #selector(menuDownload)), ("片段截取", #selector(menuClip))] {
+        for (title, action) in [("打开工具箱", #selector(menuToolbox)), ("翻译框", #selector(menuInput)), ("中转站", #selector(menuShelf)), ("视频下载", #selector(menuDownload)), ("片段截取", #selector(menuClip))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; tools.addItem(item)
+        }
+        tools.addItem(.separator())
+        for (title, action) in [("自媒体工作台", #selector(menuWorkbench)), ("添加工具…", #selector(menuAddTool))] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; tools.addItem(item)
         }
         toolsItem.submenu = tools; main.addItem(toolsItem)
@@ -632,9 +632,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let b = statusItem.button {
-            b.title = "译"
+            b.title = "工具箱"
             b.font = .systemFont(ofSize: 14, weight: .semibold)
-            b.toolTip = "截图翻译视频下载：翻译 · 截图中转站 · 视频下载"
+            b.toolTip = "工具箱：翻译 · 中转站 · 视频下载"
         }
         let m = NSMenu()
         m.delegate = self
@@ -645,11 +645,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             m.addItem(it)
             return it
         }
-        _ = add("打开工具面板", #selector(menuToolbox))
+        _ = add("打开工具箱", #selector(menuToolbox))
+        _ = add("自媒体工作台", #selector(menuWorkbench))
+        _ = add("添加工具…", #selector(menuAddTool))
         m.addItem(.separator())
-        _ = add("全屏翻译 开 / 关", #selector(toggleScreenTranslate), "t", .option)
         _ = add("输入框：中文 → 英文", #selector(menuField), "e", .option)
-        _ = add("截图中转站", #selector(menuShelf), "z", .option)
+        _ = add("中转站", #selector(menuShelf), "z", .option)
         _ = add("截一张存进中转站", #selector(menuShoot), "x", .option)
         _ = add("视频下载（无水印原画质）", #selector(menuDownload), "v", .option)
         _ = add("片段截取（原画质 / 去水印）", #selector(menuClip), "c", .option)
@@ -659,7 +660,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = add("截图翻译", #selector(menuScreen), "s", .option)
         _ = add("输入翻译", #selector(menuInput), "a", .option)
         m.addItem(.separator())
-        _ = add("下载离线翻译包（翻译秒出）…", #selector(menuPack))
         loginItem = add("开机自动启动", #selector(toggleLogin))
         _ = add("打开权限设置…", #selector(openPermissions))
         _ = add("使用说明", #selector(showHelp))
@@ -668,20 +668,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = m
     }
 
-    @objc func toggleScreenTranslate() {
-        if #available(macOS 14.0, *), let st = screenTranslator as? ScreenTranslator { st.toggle() }
-    }
-
     @objc private func toggleOrb() {
-        guard #available(macOS 14.0, *), let st = screenTranslator as? ScreenTranslator else { return }
+        guard #available(macOS 14.0, *), let st = screenTranslator as? ToolboxHubController else { return }
         let hide = st.orbVisible
         if hide { st.hideOrb() } else { st.showOrb() }
         UserDefaults.standard.set(hide, forKey: "orbHidden")
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        if #available(macOS 14.0, *), let st = screenTranslator as? ScreenTranslator {
+        if #available(macOS 14.0, *), let st = screenTranslator as? ToolboxHubController {
             orbItem?.state = st.orbVisible ? .on : .off
+
         }
     }
 
@@ -693,7 +690,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func translateSelection() {
         guard AXIsProcessTrusted() else {
             requestAccessibility()
-            panel.show(text: nil, hint: "要读取别的软件里选中的文字，需要先在「系统设置 → 隐私与安全性 → 辅助功能」里打开「截图翻译视频下载」。\n\n现在也可以直接在上面的框里输入或粘贴英文。")
+            panel.show(text: nil, hint: "要读取别的软件里选中的文字，需要先在「系统设置 → 隐私与安全性 → 辅助功能」里打开「工具箱」。\n\n现在也可以直接在上面的框里输入或粘贴英文。")
             return
         }
         if let s = SelectionReader.axSelectedText() { panel.show(text: s); return }
@@ -715,32 +712,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func menuShelf() { shelf.toggle() }
     @objc private func menuDownload() { downloader.show() }
     @objc private func menuClip() { ClipEditor.shared.show() }
+    @objc private func menuWorkbench() { CompanionTool.workbench.open() }
+    @objc private func menuAddTool() { ToolboxLinks.shared.promptToAdd() }
     @objc private func menuToolbox() {
-        if #available(macOS 14.0, *), let st = screenTranslator as? ScreenTranslator { st.toggleTools() }
+        if #available(macOS 14.0, *), let st = screenTranslator as? ToolboxHubController { st.toggleTools() }
     }
 
-    /// 菜单栏上单独的一键按钮：点一下整个屏幕变中文，再点一下恢复
-    private var screenButton: NSStatusItem?
-
-    private func buildScreenButton() {
-        let it = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        it.button?.target = self
-        it.button?.action = #selector(toggleScreenTranslate)
-        screenButton = it
-        updateScreenButton(false)
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        return true
     }
 
-    func updateScreenButton(_ on: Bool) {
-        guard let b = screenButton?.button else { return }
-        let title = on ? " 恢复原文 " : " 全屏中文 "
-        b.attributedTitle = NSAttributedString(string: title, attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-            .foregroundColor: on ? NSColor.white : NSColor.labelColor,
-            .backgroundColor: on ? ProductTheme.gold : NSColor.clear,
-        ])
-        b.toolTip = on ? "点一下恢复原文（⌥T）" : "点一下：屏幕上看到的外文全部变成中文（⌥T）"
-    }
-    @objc private func menuPack() { LanguagePack.show() }
     @objc private func menuShoot() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { ShelfShooter.shoot() } }
 
     @objc private func menuField() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.translateFocusedField() } }
@@ -749,7 +730,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func translateFocusedField() {
         guard AXIsProcessTrusted() else {
             requestAccessibility()
-            panel.show(text: nil, hint: "要改写别的软件输入框里的字，需要先在「系统设置 → 隐私与安全性 → 辅助功能」里打开「截图翻译视频下载」。")
+            panel.show(text: nil, hint: "要改写别的软件输入框里的字，需要先在「系统设置 → 隐私与安全性 → 辅助功能」里打开「工具箱」。")
             return
         }
         if NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier {
@@ -820,27 +801,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showHelp() {
-        alert("截图翻译视频下载 · 用法",
-              """
-              桌面小圆球：点一下弹出选项——
-                · 整屏翻译成中文（⌥T）：屏幕上的外文都盖上中文，滑动后自动跟着翻；再选一次恢复原文
-                · 输入框：中文 → 英文（⌥E）：在搜索框、聊天框打好中文，按一下就换成英文
-                · 打开翻译框（⌥A）
-                · 截图中转站（⌥Z）：⌘⇧4 截的图自动收进来，⌥X 直接截一张；选好一张、几张或全部，拖到想放的地方
-              拖动小球可以挪位置；图片拖到小球上也能存进中转站。微信、QQ、邮箱、密码类窗口不会被读取。
-
-              菜单栏「全屏中文」按钮：点一下，屏幕上的外文全部盖上中文；再点恢复
-              ⌥C  片段截取：只要视频里的一段（原画质），还能框选抹掉水印
-              ⌥V  视频下载：粘贴抖音 / B站 / YouTube / 小红书链接，下载无水印原画质（也可以把链接拖到小圆球上）
-
-              ⌥D  选中任意软件里的英文后按，弹出中文翻译
-              ⌥S  框选屏幕任意区域（图片、视频、按钮也行），识别英文后翻译
-              ⌥A  打开输入框，自己输入或粘贴后按 ⌘↩ 翻译
-
-              浮窗里：Esc 关闭，「固定」后点别处不会自动关，「朗读原文」听发音。
-              输入中文会自动翻成英文。
-              右上角可以换翻译引擎；默认先用本机离线翻译（菜单栏「译」→ 下载离线翻译包），没有就用必应，再不行换谷歌、MyMemory。
-              """)
+        alert("工具箱 · 用法", "点桌面悬浮入口选择翻译框、中转站、视频下载和片段截取。文件拖入中转站会保存副本；自媒体工作台需另行安装。可用添加工具收录本机应用或网页。")
     }
 
     private func alert(_ title: String, _ text: String) {
@@ -854,8 +815,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func quit() { NSApp.terminate(nil) }
 }
 
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.accessory)
-app.run()
+MainActor.assumeIsolated {
+    let app = NSApplication.shared
+    let delegate = AppDelegate()
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    app.run()
+}

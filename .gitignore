@@ -4,3 +4,7 @@ _to_delete/
 .DS_Store
 *.iconset/
 .work/
+.claude/
+.env*
+*.sqlite*
+*.db*

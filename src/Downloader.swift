@@ -253,13 +253,14 @@ final class DirectDownload: NSObject, URLSessionDownloadDelegate {
 // MARK: - 一条下载任务
 
 final class DownloadJob {
-    enum State { case running, done, failed, cancelled }
+    enum State { case running, done, failed, cancelled, deleting, deleted }
     let link: URL
     var title: String
     var state = State.running
     var progress: Double = 0
     var detail = "准备中…"
     var files: [URL] = []
+    var trashedFiles: [URL] = []
     var process: Process?
     var direct: DirectDownload?
     var onChange: (() -> Void)?
@@ -275,6 +276,27 @@ final class DownloadJob {
         direct?.cancel()
         update { state = .cancelled; detail = "已取消" }
     }
+
+    func deleteLocalFiles() {
+        guard state == .done, !files.isEmpty else { return }
+        let targets = files
+        update { state = .deleting; detail = "正在移到废纸篓…" }
+        DispatchQueue.global(qos: .utility).async {
+            let report = DownloadFileTrash.move(targets)
+            DispatchQueue.main.async {
+                self.update {
+                    self.files = report.remaining
+                    self.trashedFiles += report.trashed
+                    self.state = report.remaining.isEmpty ? .deleted : .done
+                    var parts: [String] = []
+                    if !report.trashed.isEmpty { parts.append("已移到废纸篓（\(report.trashed.count) 个文件），可在废纸篓恢复") }
+                    if report.missing > 0 { parts.append("\(report.missing) 个本地文件已不存在") }
+                    if !report.errors.isEmpty { parts.append("\(report.remaining.count) 个文件未删除：\(report.errors.joined(separator: "；"))") }
+                    self.detail = parts.joined(separator: " · ")
+                }
+            }
+        }
+    }
 }
 
 final class JobRow: NSView {
@@ -284,6 +306,7 @@ final class JobRow: NSView {
     private let bar = NSProgressIndicator()
     private let button = NSButton(title: "取消", target: nil, action: nil)
     private let clipButton = NSButton(title: "截片段 / 去水印", target: nil, action: nil)
+    private let deleteButton = NSButton(title: "删除", target: nil, action: nil)
     var onClip: ((URL) -> Void)?
 
     init(job: DownloadJob) {
@@ -309,12 +332,22 @@ final class JobRow: NSView {
         clipButton.target = self
         clipButton.action = #selector(clipClicked)
         clipButton.setContentHuggingPriority(.required, for: .horizontal)
+        deleteButton.bezelStyle = .rounded
+        deleteButton.controlSize = .small
+        deleteButton.target = self
+        deleteButton.action = #selector(deleteClicked)
+        deleteButton.identifier = NSUserInterfaceItemIdentifier("download.delete-local")
+        deleteButton.toolTip = "将这条下载对应的本地文件移到废纸篓，可恢复"
+        for action in [clipButton, deleteButton, button] {
+            action.setContentHuggingPriority(.required, for: .horizontal)
+            action.setContentCompressionResistancePriority(.required, for: .horizontal)
+        }
 
         let text = NSStackView(views: [titleLabel, bar, detailLabel])
         text.orientation = .vertical
         text.alignment = .leading
         text.spacing = 4
-        let row = NSStackView(views: [text, clipButton, button])
+        let row = NSStackView(views: [text, clipButton, deleteButton, button])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 10
@@ -338,17 +371,25 @@ final class JobRow: NSView {
     func refresh() {
         titleLabel.stringValue = job.title
         detailLabel.stringValue = job.detail
+        detailLabel.toolTip = job.detail
         detailLabel.textColor = job.state == .failed ? .systemRed : .secondaryLabelColor
         bar.doubleValue = job.state == .done ? 1 : job.progress
-        bar.isHidden = job.state == .failed || job.state == .cancelled
+        bar.isHidden = job.state == .failed || job.state == .cancelled || job.state == .deleted
         clipButton.isHidden = !(job.state == .done && job.files.contains { ClipEditor.isVideo($0) })
+        deleteButton.isHidden = !((job.state == .done || job.state == .deleting) && !job.files.isEmpty)
+        deleteButton.isEnabled = job.state == .done
+        deleteButton.title = job.state == .deleting ? "删除中…" : "删除"
+        button.isEnabled = job.state != .deleting && (job.state != .deleted || !job.trashedFiles.isEmpty)
         switch job.state {
         case .running: button.title = "取消"
         case .done: button.title = "在访达中显示"
+        case .deleting: button.title = "在访达中显示"
+        case .deleted: button.title = job.trashedFiles.isEmpty ? "文件已不存在" : "查看废纸篓"
         case .failed, .cancelled: button.title = "重试"
         }
         ProductTheme.styleButton(button)
         ProductTheme.styleButton(clipButton)
+        ProductTheme.styleButton(deleteButton)
     }
 
     var onRetry: ((DownloadJob) -> Void)?
@@ -357,12 +398,17 @@ final class JobRow: NSView {
         if let f = job.files.last(where: { ClipEditor.isVideo($0) }) { onClip?(f) }
     }
 
+    @objc private func deleteClicked() { job.deleteLocalFiles() }
+
     @objc private func buttonClicked() {
         switch job.state {
         case .running: job.cancel()
         case .done:
             if job.files.isEmpty { NSWorkspace.shared.open(DownloaderController.folder) }
             else { NSWorkspace.shared.activateFileViewerSelecting(job.files) }
+        case .deleting: break
+        case .deleted:
+            if !job.trashedFiles.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(job.trashedFiles) }
         case .failed, .cancelled: onRetry?(job)
         }
     }
@@ -423,6 +469,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.center()
         buildUI()
+        restoreHistory()
         ProductTheme.apply(to: window)
     }
 
@@ -613,9 +660,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
 
     // MARK: 开始下载
 
-    func start(_ link: URL, onFinished: ((URL) -> Void)? = nil) {
-        let job = DownloadJob(link: link)
-        job.onFinished = onFinished
+    private func addRow(for job: DownloadJob) {
         jobs.insert(job, at: 0)
         let row = JobRow(job: job)
         row.onRetry = { [weak self, weak row] j in
@@ -623,12 +668,63 @@ final class DownloaderController: NSObject, NSWindowDelegate {
             self?.jobs.removeAll { $0 === j }
             self?.start(j.link, onFinished: j.onFinished)
         }
-        job.onChange = { [weak row] in row?.refresh() }
+        job.onChange = { [weak self, weak row, weak job] in
+            row?.refresh()
+            if let job = job, job.state == .done || job.state == .deleted { self?.saveHistory() }
+        }
         row.onClip = { url in ClipEditor.shared.open(url) }
         list.insertView(row, at: 0, in: .top)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.widthAnchor.constraint(equalTo: list.widthAnchor).isActive = true
         emptyHint.isHidden = true
+    }
+
+    private func saveHistory() {
+        let entries = jobs.filter { $0.state == .done || $0.state == .deleting }.map {
+            DownloadHistoryEntry(link: $0.link, title: $0.title, detail: $0.detail, files: $0.files)
+        }
+        if let data = try? JSONEncoder().encode(entries) {
+            UserDefaults.standard.set(data, forKey: "downloadHistoryV1")
+        }
+    }
+
+    private func restoreHistory() {
+        let entries: [DownloadHistoryEntry]
+        if let data = UserDefaults.standard.data(forKey: "downloadHistoryV1") {
+            guard let decoded = try? JSONDecoder().decode([DownloadHistoryEntry].self, from: data) else { return }
+            entries = decoded
+        } else {
+            // The earlier app kept no history. Recover existing media from the save folder only,
+            // without traversing subfolders or changing any file.
+            let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey]
+            let media = Set(["mp4", "mov", "mkv", "webm", "m4v", "avi", "mp3", "m4a", "wav", "flac", "aac", "ogg"])
+            let files = (try? FileManager.default.contentsOfDirectory(at: Self.folder,
+                includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])) ?? []
+            entries = files.filter { url in
+                let info = try? url.resourceValues(forKeys: keys)
+                return media.contains(url.pathExtension.lowercased()) && info?.isRegularFile == true && info?.isSymbolicLink != true
+            }.sorted {
+                let a = try? $0.resourceValues(forKeys: keys).contentModificationDate
+                let b = try? $1.resourceValues(forKeys: keys).contentModificationDate
+                return (a ?? .distantPast) > (b ?? .distantPast)
+            }.prefix(200).map {
+                DownloadHistoryEntry(link: $0, title: $0.deletingPathExtension().lastPathComponent,
+                                     detail: "本地已下载 · \($0.lastPathComponent)", files: [$0])
+            }
+        }
+        for entry in entries.reversed() {
+            let job = DownloadJob(link: entry.link)
+            job.title = entry.title; job.detail = entry.detail
+            job.files = entry.files; job.state = .done; job.progress = 1
+            addRow(for: job)
+        }
+        saveHistory()
+    }
+
+    func start(_ link: URL, onFinished: ((URL) -> Void)? = nil) {
+        let job = DownloadJob(link: link)
+        job.onFinished = onFinished
+        addRow(for: job)
 
         if LinkParser.isDouyin(link) {
             job.update { job.detail = "正在解析抖音作品…" }

@@ -8,7 +8,7 @@ enum ProductTheme {
     static let soft = NSColor(srgbRed: 0.924, green: 0.902, blue: 0.857, alpha: 1)
     static let ink = NSColor(srgbRed: 0.184, green: 0.188, blue: 0.169, alpha: 1)
     static let muted = NSColor(srgbRed: 0.47, green: 0.46, blue: 0.41, alpha: 1)
-    static let gold = NSColor(srgbRed: 0.592, green: 0.482, blue: 0.286, alpha: 1)
+    static let gold = NSColor(srgbRed: 0.245, green: 0.398, blue: 0.333, alpha: 1)
     static let line = NSColor(srgbRed: 0.78, green: 0.73, blue: 0.63, alpha: 0.45)
     static let dark = NSColor(srgbRed: 0.20, green: 0.22, blue: 0.185, alpha: 1)
 
@@ -29,7 +29,7 @@ enum ProductTheme {
     }
 
     private static func style(_ view: NSView) {
-        if view is AVPlayerView || view is ProductHeaderView || view is ToolCardButton { return }
+        if view is AVPlayerView || view is ProductHeaderView || view is ToolCardButton || view is ToolboxHeroView || view is RelayEntryButton { return }
         if let scroll = view as? NSScrollView {
             scroll.borderType = .noBorder
             scroll.wantsLayer = true
@@ -108,11 +108,15 @@ enum ProductTheme {
 final class ProductHeaderView: NSView {
     init(eyebrow: String, title: String, subtitle: String) {
         super.init(frame: .zero)
-        heightAnchor.constraint(equalToConstant: 68).isActive = true
+        heightAnchor.constraint(equalToConstant: 88).isActive = true
         setContentHuggingPriority(.required, for: .vertical)
+        wantsLayer = true; layer?.backgroundColor = ProductTheme.surface.cgColor; layer?.cornerRadius = 14; layer?.masksToBounds = true
+        let artwork = NSImageView(); artwork.image = ToolboxArtwork.image; artwork.imageScaling = .scaleProportionallyUpOrDown
+        artwork.translatesAutoresizingMaskIntoConstraints = false; addSubview(artwork)
+        NSLayoutConstraint.activate([artwork.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8), artwork.topAnchor.constraint(equalTo: topAnchor, constant: 5), artwork.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5), artwork.widthAnchor.constraint(equalToConstant: 62)])
         let e = ProductTheme.label(eyebrow)
         let t = NSTextField(labelWithString: title)
-        t.font = ProductTheme.serif(24); t.textColor = ProductTheme.ink
+        t.font = ProductTheme.serif(22); t.textColor = ProductTheme.ink
         let s = NSTextField(labelWithString: subtitle)
         s.font = .systemFont(ofSize: 10); s.textColor = ProductTheme.muted
         s.lineBreakMode = .byTruncatingTail
@@ -121,8 +125,8 @@ final class ProductHeaderView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor), stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor), stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14), stack.trailingAnchor.constraint(lessThanOrEqualTo: artwork.leadingAnchor, constant: -8),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -145,6 +149,7 @@ final class ToolCardButton: NSButton {
     }
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var intrinsicContentSize: NSSize { NSSize(width: 155, height: 94) }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -161,11 +166,11 @@ final class ToolCardButton: NSButton {
         (hovered || isHighlighted ? ProductTheme.gold.withAlphaComponent(0.7) : ProductTheme.line).setStroke()
         shape.lineWidth = 1; shape.stroke()
         if let icon = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 19, weight: .regular).applying(.init(paletteColors: [ProductTheme.gold]))) {
-            icon.draw(in: NSRect(x: 15, y: bounds.height - 36, width: 21, height: 21))
+            icon.draw(in: NSRect(x: 15, y: bounds.height - 31, width: 19, height: 19))
         }
-        (shortcut as NSString).draw(at: NSPoint(x: bounds.width - 42, y: bounds.height - 29), withAttributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: ProductTheme.muted])
-        (title as NSString).draw(at: NSPoint(x: 15, y: 31), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .medium), .foregroundColor: ProductTheme.ink])
-        (detail as NSString).draw(at: NSPoint(x: 15, y: 13), withAttributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: ProductTheme.muted])
+        (shortcut as NSString).draw(at: NSPoint(x: bounds.width - 42, y: bounds.height - 25), withAttributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: ProductTheme.muted])
+        (title as NSString).draw(at: NSPoint(x: 15, y: 25), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .medium), .foregroundColor: ProductTheme.ink])
+        (detail as NSString).draw(at: NSPoint(x: 15, y: 10), withAttributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: ProductTheme.muted])
         if window?.firstResponder === self { ProductTheme.gold.setStroke(); let focus = NSBezierPath(roundedRect: r.insetBy(dx: 3, dy: 3), xRadius: 9, yRadius: 9); focus.lineWidth = 1.5; focus.stroke() }
     }
 }
@@ -174,90 +179,113 @@ private final class ToolboxPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) { orderOut(nil) }
 }
 
-final class ToolboxController: NSObject {
+
+private final class ToolboxDocument: NSView { override var isFlipped: Bool { true } }
+
+@MainActor final class ToolboxController: NSObject {
     let panel: NSPanel
     var onTranslate: (() -> Void)?
     var onShelf: (() -> Void)?
     var onDownload: (() -> Void)?
     var onClip: (() -> Void)?
-    var onScreen: (() -> Void)?
     var onShoot: (() -> Void)?
     var onField: (() -> Void)?
     var onAvatar: (() -> Void)?
     var onMore: (() -> Void)?
-    private let screenButton = NSButton(title: "全屏中文   ⌥T", target: nil, action: nil)
-    private let screenCaption = NSTextField(labelWithString: "点一下，把看到的外文盖成中文。")
-    private let count = ProductTheme.label("翻译 · 截图 · 视频，随手一用。")
+    private let count = ProductTheme.label("")
+    private let custom = NSStackView()
     private var outsideMonitor: Any?
-
     override init() {
-        panel = ToolboxPanel(contentRect: NSRect(x: 0, y: 0, width: 370, height: 514), styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = ToolboxPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 660), styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
-        panel.title = "截图翻译视频下载 · 工具面板"
+        panel.title = "工具箱"; panel.minSize = NSSize(width: 480, height: 640)
         panel.isFloatingPanel = true; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false
-        panel.becomesKeyOnlyIfNeeded = false
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
+        panel.becomesKeyOnlyIfNeeded = false; panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         let root = panel.contentView!
-        let header = ProductTheme.header("截图翻译视频下载", "灵感，接着发生。", "翻译 · 截图 · 下载，都在手边。")
-        screenButton.bezelStyle = .rounded; ProductTheme.primary(screenButton)
-        screenButton.target = self; screenButton.action = #selector(screen)
-        screenButton.heightAnchor.constraint(equalToConstant: 36).isActive = true
-        screenCaption.font = .systemFont(ofSize: 10)
-        let cards = [
-            ToolCardButton("翻译框", detail: "粘贴文字，拖入截图", symbol: "character.bubble", shortcut: "⌥ A", target: self, action: #selector(translate)),
-            ToolCardButton("截图中转", detail: "框选几张，一起拖走", symbol: "rectangle.stack", shortcut: "⌥ Z", target: self, action: #selector(shelf)),
-            ToolCardButton("视频下载", detail: "粘贴链接，选择位置", symbol: "arrow.down.to.line", shortcut: "⌥ V", target: self, action: #selector(download)),
-            ToolCardButton("片段截取", detail: "好动效，只留那几秒", symbol: "scissors", shortcut: "⌥ C", target: self, action: #selector(clip)),
-        ]
-        cards.forEach { $0.heightAnchor.constraint(equalToConstant: 94).isActive = true }
-        let first = NSStackView(views: Array(cards.prefix(2))), second = NSStackView(views: Array(cards.suffix(2)))
-        for row in [first, second] { row.distribution = .fillEqually; row.spacing = 10; row.heightAnchor.constraint(equalToConstant: 94).isActive = true }
-        func button(_ title: String, _ action: Selector) -> NSButton { let b = NSButton(title: title, target: self, action: action); b.bezelStyle = .rounded; return b }
-        let quick = NSStackView(views: [button("截一张  ⌥X", #selector(shoot)), button("输入框转英文  ⌥E", #selector(field))])
-        quick.distribution = .fillEqually; quick.spacing = 10
+        let header = ToolboxHeroView()
+        let relay = RelayEntryButton(target: self, action: #selector(shelf))
+        func card(_ title: String, _ detail: String, _ symbol: String, _ shortcut: String, _ action: Selector) -> NSButton {
+            let button = ToolCardButton(title, detail: detail, symbol: symbol, shortcut: shortcut, target: self, action: action)
+            button.heightAnchor.constraint(equalToConstant: 80).isActive = true; return button
+        }
+        func row(_ views: [NSView]) -> NSStackView {
+            let row = NSStackView(views: views); row.distribution = .fillEqually; row.spacing = 10; return row
+        }
+        let first = row([card("翻译框", "文字、截图，中英互译", "character.bubble", "⌥ A", #selector(translate)), card("视频下载", "链接下载，选择位置", "arrow.down.to.line", "⌥ V", #selector(download))])
+        let second = row([card("片段截取", "只留需要的几秒", "scissors", "⌥ C", #selector(clip)), card("自媒体工作台", "选题、素材与创作资料", "rectangle.grid.2x2", "打开", #selector(openWorkbench))])
+        custom.orientation = .vertical; custom.spacing = 10
+        let tools = NSStackView(views: [first, second, custom])
+        tools.orientation = .vertical; tools.alignment = .leading; tools.spacing = 10
+        let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.drawsBackground = false
+        scroll.autohidesScrollers = true
+        let document = ToolboxDocument(); scroll.documentView = document
+        tools.translatesAutoresizingMaskIntoConstraints = false; document.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(tools)
+        NSLayoutConstraint.activate([
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            tools.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 2), tools.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -2),
+            tools.topAnchor.constraint(equalTo: document.topAnchor, constant: 2), tools.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -2),
+        ])
+        for view in [first, second, custom] as [NSView] { view.widthAnchor.constraint(equalTo: tools.widthAnchor).isActive = true }
+        func button(_ title: String, _ action: Selector) -> NSButton { let button = NSButton(title: title, target: self, action: action); button.bezelStyle = .rounded; return button }
+        let quick = row([button("截一张  ⌥X", #selector(shoot)), button("输入框转英文  ⌥E", #selector(field))])
         quick.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        let footer = NSStackView(views: [button("换个形象", #selector(avatar)), button("产品介绍 ↗", #selector(website)), button("更多…", #selector(more))])
-        footer.distribution = .fillEqually; footer.spacing = 8
+        let footer = row([button("换个形象", #selector(avatar)), button("添加工具…", #selector(addTool)), button("更多…", #selector(more))])
         footer.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        let breathing = NSView()
-        breathing.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
-        let stack = NSStackView(views: [header, screenButton, screenCaption, first, second, quick, count, breathing, footer])
+        let stack = NSStackView(views: [header, relay, scroll, quick, count, footer])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(stack)
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 22), stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -22), stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 18), stack.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -18)])
-        for v in [header, screenButton, first, second, quick, footer] as [NSView] { v.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        stack.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 22), stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -22),
+            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 18), stack.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -18),
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 180),
+        ])
+        for view in [header, relay, scroll, quick, footer] as [NSView] { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         ProductTheme.apply(to: panel)
+        ToolboxLinks.shared.onChange = { [weak self] in self?.refreshCustom() }
+        refreshCustom()
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in self?.panel.orderOut(nil) }
     }
-    deinit { if let m = outsideMonitor { NSEvent.removeMonitor(m) } }
-
-    func update(isOn: Bool, screenshots: Int) {
-        screenButton.title = isOn ? "恢复原文   ⌥T" : "全屏中文   ⌥T"
-        ProductTheme.styleButton(screenButton)
-        screenCaption.stringValue = isOn ? "整屏翻译已开启，再点一次恢复原文。" : "点一下，把看到的外文盖成中文。"
-        count.stringValue = screenshots == 0 ? "翻译 · 截图 · 视频，随手一用。" : "截图中转站里有 \(screenshots) 张，随时可取。"
+    deinit { if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor) } }
+    private func refreshCustom() {
+        custom.arrangedSubviews.forEach { custom.removeArrangedSubview($0); $0.removeFromSuperview() }
+        custom.isHidden = ToolboxLinks.shared.items.isEmpty
+        for item in ToolboxLinks.shared.items {
+            let button = ToolCardButton(item.title, detail: item.kind == .application ? "我的应用" : "常用网页", symbol: item.kind == .application ? "app" : "link", shortcut: "打开", target: self, action: #selector(openCustom(_:)))
+            button.identifier = NSUserInterfaceItemIdentifier(item.id.uuidString)
+            button.heightAnchor.constraint(equalToConstant: 80).isActive = true
+            let menu = NSMenu(); let remove = NSMenuItem(title: "从工具箱移除", action: #selector(ToolboxLinks.removeFromMenu(_:)), keyEquivalent: "")
+            remove.target = ToolboxLinks.shared; remove.representedObject = item.id; menu.addItem(remove); button.menu = menu
+            custom.addArrangedSubview(button); button.widthAnchor.constraint(equalTo: custom.widthAnchor).isActive = true
+        }
+    }
+    func update(screenshots: Int) {
+        count.stringValue = screenshots == 0 ? "中转站已准备好，拖入文件就能开始。" : "中转站 · \(screenshots) 项素材，随时可取。"
     }
     func toggle(near anchor: NSRect) {
         if panel.isVisible { panel.orderOut(nil); return }
-        let vf = NSScreen.screens.first { $0.frame.intersects(anchor) }?.visibleFrame ?? NSScreen.main!.visibleFrame
+        let visible = NSScreen.screens.first { $0.frame.intersects(anchor) }?.visibleFrame ?? NSScreen.main!.visibleFrame
         let size = panel.frame.size
         var x = anchor.minX - size.width - 14
-        if x < vf.minX + 10 { x = anchor.maxX + 14 }
-        let y = min(max(anchor.midY - size.height / 2, vf.minY + 10), vf.maxY - size.height - 10)
-        x = min(max(x, vf.minX + 10), vf.maxX - size.width - 10)
+        if x < visible.minX + 10 { x = anchor.maxX + 14 }
+        let y = min(max(anchor.midY - size.height / 2, visible.minY + 10), visible.maxY - size.height - 10)
+        x = min(max(x, visible.minX + 10), visible.maxX - size.width - 10)
         panel.setFrameOrigin(NSPoint(x: x, y: y)); panel.makeKeyAndOrderFront(nil)
     }
-    private func dismiss(_ f: (() -> Void)?) { panel.orderOut(nil); f?() }
+    private func dismiss(_ callback: (() -> Void)?) { panel.orderOut(nil); callback?() }
     @objc private func translate() { dismiss(onTranslate) }
     @objc private func shelf() { dismiss(onShelf) }
     @objc private func download() { dismiss(onDownload) }
     @objc private func clip() { dismiss(onClip) }
-    @objc private func screen() { dismiss(onScreen) }
+    @objc private func openWorkbench() { panel.orderOut(nil); CompanionTool.workbench.open() }
+    @objc private func addTool() { panel.orderOut(nil); ToolboxLinks.shared.promptToAdd() }
+    @objc private func openCustom(_ sender: NSButton) {
+        guard let item = ToolboxLinks.shared.items.first(where: { $0.id.uuidString == sender.identifier?.rawValue }) else { return }
+        panel.orderOut(nil); ToolboxLinks.shared.open(item)
+    }
     @objc private func shoot() { panel.orderOut(nil); DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in self?.onShoot?() } }
     @objc private func field() { panel.orderOut(nil); DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in self?.onField?() } }
     @objc private func avatar() { dismiss(onAvatar) }
     @objc private func more() { dismiss(onMore) }
-    @objc private func website() { panel.orderOut(nil); NSWorkspace.shared.open(URL(string: "https://zurenze1.github.io/screenshot-translate-video-downloader/")!) }
 }
