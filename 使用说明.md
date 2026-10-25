@@ -1,8 +1,14 @@
-# 祖仁泽的工具箱 · 3.2.1 公开版
+# 祖仁泽的工具箱 · 3.2.2 公开版
 
 Mac 桌面上的四件创作小工具，共用一个悬浮入口和菜单栏。
 
 **[下载 Mac 安装包](https://github.com/zurenze1/screenshot-translate-video-downloader/releases/latest)** · [全部发布版本](https://github.com/zurenze1/screenshot-translate-video-downloader/releases)
+
+## 3.2.2 更新（2026-10-25）
+
+修复翻译框、视频下载和片段截取在切换到其他应用后难以重新唤起、点击时消失或无法输入的问题。重新打开会恢复最小化的窗口并取得输入焦点；翻译框不再因失去焦点而自动关闭，已有文字与译文会保留。翻译框“固定”仍可切换置顶。
+
+工具箱入口在集合窗口持有焦点时再次点击会收起；被其他应用遮挡时再次点击会恢复显示。
 
 ## 每个工具
 

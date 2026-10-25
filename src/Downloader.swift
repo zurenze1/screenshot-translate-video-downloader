@@ -466,6 +466,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         window.title = "视频下载"
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 680, height: 480)
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.delegate = self
         window.center()
         buildUI()
@@ -599,8 +600,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
     // MARK: 打开
 
     func show(link: String? = nil) {
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        ToolWindowPresenter.show(window, focus: field)
         if let l = link, let u = LinkParser.firstURL(in: l) { start(u); return }
         // 剪贴板里有链接就先填上
         if field.stringValue.isEmpty, let s = NSPasteboard.general.string(forType: .string), LinkParser.firstURL(in: s) != nil {

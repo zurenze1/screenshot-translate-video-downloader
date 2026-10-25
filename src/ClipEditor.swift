@@ -344,6 +344,7 @@ final class ClipEditor: NSObject, NSWindowDelegate {
         window.title = "片段截取 · 原画质"
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 960, height: 700)
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.delegate = self
         window.center()
         buildUI()
@@ -525,8 +526,7 @@ final class ClipEditor: NSObject, NSWindowDelegate {
     // MARK: 载入
 
     func show() {
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        ToolWindowPresenter.show(window)
     }
 
     private func resetForNewVideo() {

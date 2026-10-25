@@ -248,8 +248,9 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
                         backing: .buffered, defer: false)
         super.init()
         panel.title = "翻译"
-        panel.isFloatingPanel = true
-        panel.level = .floating
+        panel.isFloatingPanel = false
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.level = .normal
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -359,17 +360,15 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
             previousApp = (front?.processIdentifier == ProcessInfo.processInfo.processIdentifier) ? nil : front
             placeNearMouse()
         }
-        sourceView.string = text ?? ""
-        lastLength = sourceView.string.count
-        resultView.string = hint ?? "输入、粘贴文字会自动翻译（中文→英文，其他→中文）。\n截图也可以直接 ⌘V 粘贴或拖进上面的框，自动识别图上的字。"
-        statusLabel.stringValue = ""
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
-        if text != nil {
-            translate()
-        } else {
-            panel.makeFirstResponder(sourceView)
+        // 重新唤起只恢复窗口；主动传入新文字或提示时才替换内容。
+        if text != nil || hint != nil || resultView.string.isEmpty {
+            sourceView.string = text ?? ""
+            lastLength = sourceView.string.count
+            resultView.string = hint ?? "输入、粘贴文字会自动翻译（中文→英文，其他→中文）。\n截图也可以直接 ⌘V 粘贴或拖进上面的框，自动识别图上的字。"
+            statusLabel.stringValue = ""
         }
+        ToolWindowPresenter.show(panel, focus: sourceView)
+        if text != nil { translate() }
     }
 
     private func placeNearMouse() {
@@ -463,6 +462,8 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
 
     @objc private func togglePin() {
         pinned = pinButton.state == .on
+        panel.level = pinned ? .floating : .normal
+        panel.isFloatingPanel = pinned
         pinButton.title = pinned ? "已固定" : "固定"
         ProductTheme.styleButton(pinButton)
     }
@@ -471,10 +472,6 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextViewDelegate {
         let back = previousApp
         panel.close()
         back?.activate(options: [])
-    }
-
-    func windowDidResignKey(_ notification: Notification) {
-        if !pinned && panel.isVisible { panel.close() }
     }
 
     func windowWillClose(_ notification: Notification) {

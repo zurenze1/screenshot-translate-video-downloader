@@ -175,6 +175,51 @@ final class ToolCardButton: NSButton {
     }
 }
 
+/// 工具窗口的唤起独立于应用激活；激活完成后只聚焦本次请求的窗口。
+@MainActor final class ToolWindowPresenter: NSObject {
+    static let shared = ToolWindowPresenter()
+    private weak var pendingWindow: NSWindow?
+    private weak var pendingFocus: NSResponder?
+
+    private override init() {
+        super.init()
+        NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive), name: NSApplication.didBecomeActiveNotification, object: NSApp)
+    }
+
+    nonisolated static func show(_ window: NSWindow, focus: NSResponder? = nil) {
+        DispatchQueue.main.async { shared.present(window, focus: focus) }
+    }
+
+    private func present(_ window: NSWindow, focus: NSResponder?) {
+        pendingWindow = window
+        pendingFocus = focus
+        if NSApp.isHidden { NSApp.unhide(nil) }
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        let target = window.attachedSheet ?? window
+        target.makeKeyAndOrderFront(nil)
+        if target === window, let focus { window.makeFirstResponder(focus) }
+        if NSApp.isActive { finishPresentation() }
+        else {
+            NSApp.activate(ignoringOtherApps: true)
+            // 激活可能在当前鼠标事件处理之后完成；不以固定延时猜测。
+            DispatchQueue.main.async { [weak self] in
+                if NSApp.isActive { self?.finishPresentation() }
+            }
+        }
+    }
+
+    @objc private func didBecomeActive(_ notification: Notification) { finishPresentation() }
+    private func finishPresentation() {
+        guard NSApp.isActive, let window = pendingWindow else { return }
+        let focus = pendingFocus
+        pendingWindow = nil; pendingFocus = nil
+        guard window.isVisible else { return } // 已主动关闭的窗口不重新弹出
+        let target = window.attachedSheet ?? window
+        target.makeKeyAndOrderFront(nil)
+        if target === window, let focus { window.makeFirstResponder(focus) }
+    }
+}
+
 private final class ToolboxPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) { orderOut(nil) }
 }
@@ -264,7 +309,7 @@ private final class ToolboxDocument: NSView { override var isFlipped: Bool { tru
         count.stringValue = screenshots == 0 ? "中转站已准备好，拖入文件就能开始。" : "中转站 · \(screenshots) 项素材，随时可取。"
     }
     func toggle(near anchor: NSRect) {
-        if panel.isVisible { panel.orderOut(nil); return }
+        if panel.isVisible && panel.isKeyWindow { panel.orderOut(nil); return }
         let visible = NSScreen.screens.first { $0.frame.intersects(anchor) }?.visibleFrame ?? NSScreen.main!.visibleFrame
         let size = panel.frame.size
         var x = anchor.minX - size.width - 14
