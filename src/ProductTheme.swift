@@ -259,8 +259,9 @@ private final class ToolboxDocument: NSView { override var isFlipped: Bool { tru
         }
         let first = row([card("翻译框", "文字、截图，中英互译", "character.bubble", "⌥ A", #selector(translate)), card("视频下载", "链接下载，选择位置", "arrow.down.to.line", "⌥ V", #selector(download))])
         let second = row([card("片段截取", "只留需要的几秒", "scissors", "⌥ C", #selector(clip)), card("自媒体工作台", "选题、素材与创作资料", "rectangle.grid.2x2", "打开", #selector(openWorkbench))])
+        let capture = row([card("录屏", "区域录制，声音独立选择", "record.circle", "打开", #selector(record)), card("存入 Eagle", "从中转站选择素材并归档", "tray.and.arrow.down", "中转站", #selector(shelf))])
         custom.orientation = .vertical; custom.spacing = 10
-        let tools = NSStackView(views: [first, second, custom])
+        let tools = NSStackView(views: [first, second, capture, custom])
         tools.orientation = .vertical; tools.alignment = .leading; tools.spacing = 10
         let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.drawsBackground = false
         scroll.autohidesScrollers = true
@@ -272,7 +273,7 @@ private final class ToolboxDocument: NSView { override var isFlipped: Bool { tru
             tools.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 2), tools.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -2),
             tools.topAnchor.constraint(equalTo: document.topAnchor, constant: 2), tools.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -2),
         ])
-        for view in [first, second, custom] as [NSView] { view.widthAnchor.constraint(equalTo: tools.widthAnchor).isActive = true }
+        for view in [first, second, capture, custom] as [NSView] { view.widthAnchor.constraint(equalTo: tools.widthAnchor).isActive = true }
         func button(_ title: String, _ action: Selector) -> NSButton { let button = NSButton(title: title, target: self, action: action); button.bezelStyle = .rounded; return button }
         let quick = row([button("截一张  ⌥X", #selector(shoot)), button("输入框转英文  ⌥E", #selector(field))])
         quick.heightAnchor.constraint(equalToConstant: 28).isActive = true
@@ -323,6 +324,7 @@ private final class ToolboxDocument: NSView { override var isFlipped: Bool { tru
     @objc private func shelf() { dismiss(onShelf) }
     @objc private func download() { dismiss(onDownload) }
     @objc private func clip() { dismiss(onClip) }
+    @objc private func record() { panel.orderOut(nil); RecordingEntry.show() }
     @objc private func openWorkbench() { panel.orderOut(nil); CompanionTool.workbench.open() }
     @objc private func addTool() { panel.orderOut(nil); ToolboxLinks.shared.promptToAdd() }
     @objc private func openCustom(_ sender: NSButton) {

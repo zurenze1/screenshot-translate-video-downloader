@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>3.2.2</string>
+	<string>3.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>11</string>
+	<string>12</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -30,6 +30,8 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>仅在你主动截图时读取屏幕，用于识别文字或保存截图。</string>
+	<string>按你的操作识别屏幕文字、截图或录制所选区域，录屏文件保存在本机。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>仅在录屏时开启麦克风开关后，录制麦克风声音到本机视频。</string>
 </dict>
 </plist>

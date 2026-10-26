@@ -238,6 +238,7 @@ final class OrbView: NSView {
         item("翻译框", #selector(menuPanel), "a")
         item("中转站（\(ShelfStore.shared.items.count) 张）", #selector(menuShelf), "z")
         item("截一张存进中转站", #selector(menuShoot), "x")
+        item("录屏（区域 / 声音 / 预览）", #selector(menuRecord))
         item("输入框：中文 → 英文", #selector(menuField), "e")
         menu.addItem(.separator())
         item("视频下载", #selector(menuDownload), "v"); item("片段截取", #selector(menuClip), "c")
@@ -254,6 +255,7 @@ final class OrbView: NSView {
     @objc private func menuShelf() { onOpenShelf?() }
     @objc private func menuDownload() { onOpenDownloader?(nil) }
     @objc private func menuClip() { onOpenClip?() }
+    @objc private func menuRecord() { RecordingEntry.show() }
     @objc private func menuWorkbench() { CompanionTool.workbench.open() }
     @objc private func menuAddTool() { ToolboxLinks.shared.promptToAdd() }
     @objc private func menuField() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.onTranslateField?() } }

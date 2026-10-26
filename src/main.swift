@@ -615,7 +615,7 @@ enum Toast {
         editItem.submenu = edit
         let toolsItem = NSMenuItem(title: "工具", action: nil, keyEquivalent: "")
         let tools = NSMenu(title: "工具")
-        for (title, action) in [("打开工具箱", #selector(menuToolbox)), ("翻译框", #selector(menuInput)), ("中转站", #selector(menuShelf)), ("视频下载", #selector(menuDownload)), ("片段截取", #selector(menuClip))] {
+        for (title, action) in [("打开工具箱", #selector(menuToolbox)), ("翻译框", #selector(menuInput)), ("中转站", #selector(menuShelf)), ("录屏", #selector(menuRecord)), ("视频下载", #selector(menuDownload)), ("片段截取", #selector(menuClip))] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; tools.addItem(item)
         }
         tools.addItem(.separator())
@@ -649,6 +649,7 @@ enum Toast {
         _ = add("输入框：中文 → 英文", #selector(menuField), "e", .option)
         _ = add("中转站", #selector(menuShelf), "z", .option)
         _ = add("截一张存进中转站", #selector(menuShoot), "x", .option)
+        _ = add("录屏（区域 / 声音 / 预览）", #selector(menuRecord))
         _ = add("视频下载（无水印原画质）", #selector(menuDownload), "v", .option)
         _ = add("片段截取（原画质 / 去水印）", #selector(menuClip), "c", .option)
         orbItem = add("显示桌面悬浮入口", #selector(toggleOrb))
@@ -709,6 +710,7 @@ enum Toast {
     @objc private func menuShelf() { shelf.toggle() }
     @objc private func menuDownload() { downloader.show() }
     @objc private func menuClip() { ClipEditor.shared.show() }
+    @objc private func menuRecord() { RecordingEntry.show() }
     @objc private func menuWorkbench() { CompanionTool.workbench.open() }
     @objc private func menuAddTool() { ToolboxLinks.shared.promptToAdd() }
     @objc private func menuToolbox() {
@@ -809,6 +811,9 @@ enum Toast {
         a.runModal()
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        RecordingEntry.canTerminate() && EagleExportController.shared.canTerminate() ? .terminateNow : .terminateCancel
+    }
     @objc private func quit() { NSApp.terminate(nil) }
 }
 

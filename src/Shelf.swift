@@ -345,7 +345,7 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate, NSSea
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let top = NSStackView(views: [titleLabel, spacer, button("添加文件…", #selector(addFiles)), button("全选", #selector(selectAll)), button("截一张 ⌥X", #selector(shoot))])
+        let top = NSStackView(views: [titleLabel, spacer, button("添加文件…", #selector(addFiles)), button("全选", #selector(selectAll)), button("录屏", #selector(record)), button("截一张 ⌥X", #selector(shoot))])
         filters.selectedSegment = 0; filters.selectedSegmentBezelColor = ToolboxArtwork.forest; filters.target = self; filters.action = #selector(filterChanged)
         search.placeholderString = "搜索文件名"; search.delegate = self
         search.widthAnchor.constraint(equalToConstant: 200).isActive = true
@@ -357,7 +357,7 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate, NSSea
         let spacer2 = NSView()
         spacer2.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
         let bottom = NSStackView(views: [button("复制", #selector(copySelected)), button("翻译图上的字", #selector(translateSelected)),
-                                         button("在访达中显示", #selector(reveal)), spacer2,
+                                         button("在访达中显示", #selector(reveal)), button("存入 Eagle…", #selector(exportEagle)), spacer2,
                                          button("删除", #selector(deleteSelected)), button("清空", #selector(clearAll))])
         bottom.orientation = .horizontal
         bottom.distribution = .fill
@@ -499,6 +499,11 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate, NSSea
     }
 
     private var selectedURLs: [URL] { visibleItems.filter { selection.contains($0) } }
+    @MainActor @objc private func record() { panel.orderOut(nil); RecordingEntry.show() }
+    @MainActor @objc private func exportEagle() {
+        guard !selectedURLs.isEmpty else { Toast.show("请先选中要存入 Eagle 的素材。"); return }
+        panel.orderOut(nil); EagleExportController.shared.show(urls: selectedURLs)
+    }
 
     var currentSelection: Set<URL> { selection }
     func setSelection(_ s: Set<URL>) { selection = s; updateTitle() }
