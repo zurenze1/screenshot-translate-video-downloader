@@ -18,6 +18,17 @@ enum ToolboxArtwork {
 }
 
 final class ToolboxHeroView: NSView {
+    private let beijingClock = NSTextField(labelWithString: "")
+    private var clockTimer: Timer?
+    private let clockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        formatter.dateFormat = "yyyy.MM.dd EEEE HH:mm"
+        return formatter
+    }()
+
     init() {
         super.init(frame: .zero)
         heightAnchor.constraint(equalToConstant: 152).isActive = true
@@ -28,7 +39,11 @@ final class ToolboxHeroView: NSView {
         title.font = ProductTheme.serif(25); title.textColor = ProductTheme.ink
         let subtitle = NSTextField(labelWithString: "收好灵感，也照顾好手边的小事。")
         subtitle.font = .systemFont(ofSize: 11); subtitle.textColor = ProductTheme.muted
-        let text = NSStackView(views: [eyebrow, title, subtitle]); text.orientation = .vertical; text.alignment = .leading; text.spacing = 11
+        beijingClock.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        beijingClock.textColor = ToolboxArtwork.forest
+        beijingClock.setAccessibilityIdentifier("toolbox.beijing-clock")
+        updateClock()
+        let text = NSStackView(views: [eyebrow, title, subtitle, beijingClock]); text.orientation = .vertical; text.alignment = .leading; text.spacing = 8
         for v in [image, text] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         NSLayoutConstraint.activate([
             text.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18), text.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -37,6 +52,21 @@ final class ToolboxHeroView: NSView {
             image.topAnchor.constraint(equalTo: topAnchor, constant: 8), image.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8)
         ])
     }
+    private func updateClock() {
+        beijingClock.stringValue = "北京时间 · " + clockFormatter.string(from: Date())
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        clockTimer?.invalidate()
+        clockTimer = nil
+        guard window != nil else { return }
+        updateClock()
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.updateClock() }
+        timer.tolerance = 0.2
+        RunLoop.main.add(timer, forMode: .common)
+        clockTimer = timer
+    }
+    deinit { clockTimer?.invalidate() }
     required init?(coder: NSCoder) { fatalError() }
 }
 
