@@ -463,7 +463,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 560),
                           styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         super.init()
-        window.title = "视频下载"
+        window.title = "视频素材采集"
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 680, height: 480)
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
@@ -476,7 +476,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
 
     private func buildUI() {
         let content = window.contentView!
-        let header = ProductTheme.header("03 / 视频下载", "把灵感，存到手边。", "粘贴作品链接，选择画质和保存位置。")
+        let header = ProductTheme.header("03 / 视频素材采集", "把灵感，存到手边。", "粘贴作品链接，选择画质和保存位置。")
 
         field.placeholderString = "粘贴抖音 / B站 / YouTube / 小红书 / TikTok 的链接或分享文字，按回车"
         field.font = .systemFont(ofSize: 14)

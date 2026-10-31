@@ -241,7 +241,7 @@ final class OrbView: NSView {
         item("录屏（区域 / 声音 / 预览）", #selector(menuRecord))
         item("输入框：中文 → 英文", #selector(menuField), "e")
         menu.addItem(.separator())
-        item("视频下载", #selector(menuDownload), "v"); item("片段截取", #selector(menuClip), "c")
+        item("视频素材采集", #selector(menuDownload), "v"); item("片段截取", #selector(menuClip), "c")
         item("自媒体工作台", #selector(menuWorkbench)); item("添加工具…", #selector(menuAddTool))
         menu.addItem(.separator())
         item("换个形象…", #selector(menuAvatar))

@@ -239,7 +239,7 @@ struct RemoteVideo {
                                headers: ["User-Agent": Douyin.mobileUA, "Referer": "https://www.douyin.com/"],
                                width: 0, height: 0, direct: u)
         }
-        guard let ytdlp = Tools.ytdlp else { throw TError(message: "还没有下载组件，先在「视频下载」里下载一次任意视频，会自动安装") }
+        guard let ytdlp = Tools.ytdlp else { throw TError(message: "还没有下载组件，先在「视频素材采集」里下载一次任意视频，会自动安装") }
         let data: Data = try await withCheckedThrowingContinuation { cont in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: ytdlp)
@@ -271,7 +271,7 @@ struct RemoteVideo {
             ?? https.filter { s($0, "vcodec").hasPrefix("avc") }.max { h($0) < h($1) }
             ?? https.max { h($0) < h($1) }
             ?? videos.filter { s($0, "protocol").contains("m3u8") }.max { h($0) < h($1) }
-        guard let f = pick, let u = URL(string: s(f, "url")) else { throw TError(message: "这个网站的视频没法在线预览，可以先用「视频下载」下载下来再截") }
+        guard let f = pick, let u = URL(string: s(f, "url")) else { throw TError(message: "这个网站的视频没法在线预览，可以先用「视频素材采集」下载下来再截") }
         let headers = (f["http_headers"] as? [String: String]) ?? (j["http_headers"] as? [String: String]) ?? [:]
         // 画面是分段格式时，再挑一路 m4a 声音给预览用
         let audios = formats.filter { s($0, "vcodec") == "none" && s($0, "acodec").hasPrefix("mp4a") && s($0, "protocol").hasPrefix("http") }

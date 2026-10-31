@@ -615,7 +615,7 @@ enum Toast {
         editItem.submenu = edit
         let toolsItem = NSMenuItem(title: "工具", action: nil, keyEquivalent: "")
         let tools = NSMenu(title: "工具")
-        for (title, action) in [("打开工具箱", #selector(menuToolbox)), ("翻译框", #selector(menuInput)), ("中转站", #selector(menuShelf)), ("录屏", #selector(menuRecord)), ("视频下载", #selector(menuDownload)), ("片段截取", #selector(menuClip))] {
+        for (title, action) in [("打开工具箱", #selector(menuToolbox)), ("翻译框", #selector(menuInput)), ("中转站", #selector(menuShelf)), ("录屏", #selector(menuRecord)), ("视频素材采集", #selector(menuDownload)), ("片段截取", #selector(menuClip))] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; tools.addItem(item)
         }
         tools.addItem(.separator())
@@ -631,7 +631,7 @@ enum Toast {
         if let b = statusItem.button {
             b.title = "工具箱"
             b.font = .systemFont(ofSize: 14, weight: .semibold)
-            b.toolTip = "工具箱：翻译 · 中转站 · 视频下载"
+            b.toolTip = "工具箱：翻译 · 中转站 · 视频素材采集"
         }
         let m = NSMenu()
         m.delegate = self
@@ -650,7 +650,7 @@ enum Toast {
         _ = add("中转站", #selector(menuShelf), "z", .option)
         _ = add("截一张存进中转站", #selector(menuShoot), "x", .option)
         _ = add("录屏（区域 / 声音 / 预览）", #selector(menuRecord))
-        _ = add("视频下载（无水印原画质）", #selector(menuDownload), "v", .option)
+        _ = add("视频素材采集", #selector(menuDownload), "v", .option)
         _ = add("片段截取（原画质 / 去水印）", #selector(menuClip), "c", .option)
         orbItem = add("显示桌面悬浮入口", #selector(toggleOrb))
         m.addItem(.separator())
@@ -800,7 +800,7 @@ enum Toast {
     }
 
     @objc private func showHelp() {
-        alert("工具箱 · 用法", "点桌面悬浮入口选择翻译框、中转站、视频下载和片段截取。文件拖入中转站会保存副本；自媒体工作台需另行安装。可用添加工具收录本机应用或网页。")
+        alert("工具箱 · 用法", "点桌面悬浮入口选择翻译框、中转站、视频素材采集和片段截取。文件拖入中转站会保存副本；自媒体工作台需另行安装。可用添加工具收录本机应用或网页。")
     }
 
     private func alert(_ title: String, _ text: String) {
