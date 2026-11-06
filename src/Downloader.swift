@@ -180,22 +180,38 @@ enum Douyin {
             let sorted = rates.sorted { ($0["bit_rate"] as? Int ?? 0) > ($1["bit_rate"] as? Int ?? 0) }
             for b in sorted {
                 if let pa = b["play_addr"] as? [String: Any], let l = pa["url_list"] as? [String] {
-                    cands += l.compactMap { URL(string: $0.replacingOccurrences(of: "playwm", with: "play")) }
+                    cands += l.flatMap(playbackURLs)
                 }
             }
         }
         if let pa = video["play_addr"] as? [String: Any] {
             if let uri = pa["uri"] as? String, !uri.isEmpty {
                 for ratio in ["1080p", "720p"] {
-                    if let u = URL(string: "https://aweme.snssdk.com/aweme/v1/play/?video_id=\(uri)&ratio=\(ratio)&line=0") { cands.append(u) }
+                    cands += playbackURLs("https://aweme.snssdk.com/aweme/v1/play/?video_id=\(uri)&ratio=\(ratio)&line=0")
                 }
             }
             if let l = pa["url_list"] as? [String] {
-                cands += l.compactMap { URL(string: $0.replacingOccurrences(of: "playwm", with: "play")) }
+                cands += l.flatMap(playbackURLs)
             }
         }
+        var seen = Set<URL>()
+        cands = cands.filter { seen.insert($0).inserted }
         guard !cands.isEmpty else { throw TError(message: "没拿到视频地址") }
         return Item(title: title, videoURLs: cands, images: [])
+    }
+
+    /// 旧播放域名在部分网络中无法完成 TLS；优先使用抖音现行播放入口。
+    /// 只迁移已知播放接口，CDN 直链及其签名参数保持原样。
+    static func playbackURLs(_ text: String) -> [URL] {
+        guard let original = URL(string: text), var parts = URLComponents(url: original, resolvingAgainstBaseURL: false) else { return [] }
+        guard parts.host?.lowercased() == "aweme.snssdk.com",
+              ["/aweme/v1/play/", "/aweme/v1/play", "/aweme/v1/playwm/", "/aweme/v1/playwm"].contains(parts.path) else { return [original] }
+        parts.path = parts.path.replacingOccurrences(of: "/playwm", with: "/play")
+        parts.scheme = "https"
+        return ["www.douyin.com", "www.iesdouyin.com", "aweme.snssdk.com"].compactMap { host in
+            parts.host = host
+            return parts.url
+        }
     }
 
     static func match(_ s: String, _ pattern: String) -> String? {
@@ -762,10 +778,10 @@ final class DownloaderController: NSObject, NSWindowDelegate {
         return u
     }
 
-    private func downloadDirect(_ cands: [URL], name: String, ext: String, job: DownloadJob) {
+    private func downloadDirect(_ cands: [URL], name: String, ext: String, job: DownloadJob, lastError: Error? = nil) {
         guard job.state == .running else { return }
         guard let first = cands.first else {
-            job.update { job.state = .failed; job.detail = "所有下载地址都失效了，稍后再试" }
+            job.update { job.state = .failed; job.detail = "抖音下载失败：\(lastError?.localizedDescription ?? "没有可用的视频地址")" }
             return
         }
         let dest = uniqueURL(DownloaderController.safeName(name), ext)
@@ -785,7 +801,7 @@ final class DownloaderController: NSObject, NSWindowDelegate {
                 let size = (try? FileManager.default.attributesOfItem(atPath: u.path)[.size] as? Int) ?? 0
                 if size < 50_000 {   // 太小多半是错误页，换下一个地址
                     try? FileManager.default.removeItem(at: u)
-                    self?.downloadDirect(Array(cands.dropFirst()), name: name, ext: ext, job: job)
+                    self?.downloadDirect(Array(cands.dropFirst()), name: name, ext: ext, job: job, lastError: TError(message: "服务器返回了空文件或错误页面"))
                     return
                 }
                 job.files = [u]
@@ -793,8 +809,8 @@ final class DownloaderController: NSObject, NSWindowDelegate {
                     let sz = (try? FileManager.default.attributesOfItem(atPath: u.path)[.size] as? Int) ?? size
                     return "✅ 完成 · \(ByteCountFormatter.string(fromByteCount: Int64(sz), countStyle: .file)) · \(u.lastPathComponent)"
                 }
-            case .failure:
-                self?.downloadDirect(Array(cands.dropFirst()), name: name, ext: ext, job: job)
+            case .failure(let error):
+                self?.downloadDirect(Array(cands.dropFirst()), name: name, ext: ext, job: job, lastError: error)
             }
         })
     }
