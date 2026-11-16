@@ -258,7 +258,7 @@ private final class ToolboxDocument: NSView { override var isFlipped: Bool { tru
             let row = NSStackView(views: views); row.distribution = .fillEqually; row.spacing = 10; return row
         }
         let first = row([card("翻译框", "文字、截图，中英互译", "character.bubble", "⌥ A", #selector(translate)), card("视频素材采集", "解析链接，选择画质", "arrow.down.to.line", "⌥ V", #selector(download))])
-        let second = row([card("片段截取", "只留需要的几秒", "scissors", "⌥ C", #selector(clip)), card("自媒体工作台", "选题、素材与创作资料", "rectangle.grid.2x2", "打开", #selector(openWorkbench))])
+        let second = row([card("片段截取", "只留需要的几秒", "scissors", "⌥ C", #selector(clip))])
         let capture = row([card("录屏", "区域录制，声音独立选择", "record.circle", "打开", #selector(record)), card("存入 Eagle", "从中转站选择素材并归档", "tray.and.arrow.down", "中转站", #selector(shelf))])
         custom.orientation = .vertical; custom.spacing = 10
         let tools = NSStackView(views: [first, second, capture, custom])
@@ -325,7 +325,7 @@ private final class ToolboxDocument: NSView { override var isFlipped: Bool { tru
     @objc private func download() { dismiss(onDownload) }
     @objc private func clip() { dismiss(onClip) }
     @objc private func record() { panel.orderOut(nil); RecordingEntry.show() }
-    @objc private func openWorkbench() { panel.orderOut(nil); CompanionTool.workbench.open() }
+
     @objc private func addTool() { panel.orderOut(nil); ToolboxLinks.shared.promptToAdd() }
     @objc private func openCustom(_ sender: NSButton) {
         guard let item = ToolboxLinks.shared.items.first(where: { $0.id.uuidString == sender.identifier?.rawValue }) else { return }

@@ -619,7 +619,7 @@ enum Toast {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; tools.addItem(item)
         }
         tools.addItem(.separator())
-        for (title, action) in [("自媒体工作台", #selector(menuWorkbench)), ("添加工具…", #selector(menuAddTool))] {
+        for (title, action) in [("添加工具…", #selector(menuAddTool))] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; tools.addItem(item)
         }
         toolsItem.submenu = tools; main.addItem(toolsItem)
@@ -643,7 +643,7 @@ enum Toast {
             return it
         }
         _ = add("打开工具箱", #selector(menuToolbox))
-        _ = add("自媒体工作台", #selector(menuWorkbench))
+
         _ = add("添加工具…", #selector(menuAddTool))
         m.addItem(.separator())
         _ = add("输入框：中文 → 英文", #selector(menuField), "e", .option)
@@ -711,7 +711,7 @@ enum Toast {
     @objc private func menuDownload() { downloader.show() }
     @objc private func menuClip() { ClipEditor.shared.show() }
     @objc private func menuRecord() { RecordingEntry.show() }
-    @objc private func menuWorkbench() { CompanionTool.workbench.open() }
+
     @objc private func menuAddTool() { ToolboxLinks.shared.promptToAdd() }
     @objc private func menuToolbox() {
         if #available(macOS 14.0, *), let st = screenTranslator as? ToolboxHubController { st.toggleTools() }
@@ -800,7 +800,7 @@ enum Toast {
     }
 
     @objc private func showHelp() {
-        alert("工具箱 · 用法", "点桌面悬浮入口选择翻译框、中转站、视频素材采集和片段截取。文件拖入中转站会保存副本；自媒体工作台需另行安装。可用添加工具收录本机应用或网页。")
+        alert("工具箱 · 用法", "点桌面悬浮入口选择翻译框、中转站、视频素材采集和片段截取。文件拖入中转站会保存副本。可用添加工具收录本机应用或网页。")
     }
 
     private func alert(_ title: String, _ text: String) {

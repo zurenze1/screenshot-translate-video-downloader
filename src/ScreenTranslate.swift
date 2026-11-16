@@ -191,7 +191,7 @@ final class OrbView: NSView {
         orbPanel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         orbPanel.isMovableByWindowBackground = false; orbPanel.becomesKeyOnlyIfNeeded = true
         orbPanel.hidesOnDeactivate = false; orbPanel.contentView = orb
-        orb.toolTip = "工具箱：翻译、截图、视频和自媒体工作台。点开选择工具，拖动可移动。"
+        orb.toolTip = "工具箱：翻译、素材中转、视频采集和录屏。点开选择工具，拖动可移动。"
         orb.setAccessibilityElement(true); orb.setAccessibilityRole(.button); orb.setAccessibilityLabel("打开工具箱")
         orb.onClick = { [weak self] in self?.toggleTools() }
         orb.onMoved = { [weak self] in self?.saveOrbPosition() }
@@ -242,7 +242,7 @@ final class OrbView: NSView {
         item("输入框：中文 → 英文", #selector(menuField), "e")
         menu.addItem(.separator())
         item("视频素材采集", #selector(menuDownload), "v"); item("片段截取", #selector(menuClip), "c")
-        item("自媒体工作台", #selector(menuWorkbench)); item("添加工具…", #selector(menuAddTool))
+        item("添加工具…", #selector(menuAddTool))
         menu.addItem(.separator())
         item("换个形象…", #selector(menuAvatar))
         if Avatar.current != nil { item("恢复默认工具箱", #selector(menuAvatarReset)) }
@@ -256,7 +256,7 @@ final class OrbView: NSView {
     @objc private func menuDownload() { onOpenDownloader?(nil) }
     @objc private func menuClip() { onOpenClip?() }
     @objc private func menuRecord() { RecordingEntry.show() }
-    @objc private func menuWorkbench() { CompanionTool.workbench.open() }
+
     @objc private func menuAddTool() { ToolboxLinks.shared.promptToAdd() }
     @objc private func menuField() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.onTranslateField?() } }
     @objc private func menuShoot() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { ShelfShooter.shoot() } }

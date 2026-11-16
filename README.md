@@ -1,3 +1,7 @@
+## 3.3.4：移除旧自媒体工作台入口
+
+首页卡片、菜单、悬浮入口右键菜单和使用提示中的旧“自媒体工作台”入口已移除。其创作流程由现有IP工作台承接；IP工作台及其数据不属于工具箱安装包。其他工具与自定义入口保持原有功能。
+
 ## 3.3.3：修复部分抖音作品下载失败
 
 抖音旧播放域名连接失败时，优先通过当前官方播放入口取得视频；保留原接口作为备用。仅迁移已知播放接口，CDN直链和签名参数保持原样。下载仍失败时显示实际连接或服务器错误，不再统一提示“地址失效”。
@@ -43,7 +47,7 @@ Mac 桌面上的创作小工具，共用一个悬浮入口和菜单栏。
 
 这些工具共用同一个安装包，可从工具箱单独打开。
 
-另两件独立工具：**[自媒体工作台](https://github.com/zurenze1/content-workbench)**（选题、素材、脚本和发布复盘）、**[人生档案](https://github.com/zurenze1/life-archive)**（[Mac 下载](https://github.com/zurenze1/life-archive/releases/latest)）。
+独立工具：**[人生档案](https://github.com/zurenze1/life-archive)**（[Mac 下载](https://github.com/zurenze1/life-archive/releases/latest)）。
 
 本公开版按作者要求排除拾片与屏幕中文，其源码、资源和安装包均未加入。首页采用系统图标，未分发本机 Eagle 插画。
 
