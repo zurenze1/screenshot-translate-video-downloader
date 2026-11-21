@@ -81,6 +81,7 @@ private final class RecordingRegionView: NSView {
         super.init()
         panel.title = "录屏"; panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false
         panel.level = .floating; panel.delegate = self
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         displays.target = self; displays.action = #selector(displayChanged)
         systemAudio.state = .on
         choose.target = self; choose.action = #selector(selectRegion)
@@ -103,6 +104,10 @@ private final class RecordingRegionView: NSView {
             screens = NSScreen.screens; displays.removeAllItems()
             displays.addItems(withTitles: screens.enumerated().map { "屏幕 \($0.offset + 1) · \($0.element.localizedName)" })
             region = nil
+        }
+        if let url = pendingURL, !Self.hasDraft(url) {
+            pendingURL = nil; player.player = nil; preview?.orderOut(nil)
+            status.stringValue = "上一段暂存已被移走，可以开始新的录制。"
         }
         if pendingURL != nil { showPreview() } else { ToolWindowPresenter.show(panel) }
     }
@@ -211,9 +216,20 @@ private final class RecordingRegionView: NSView {
     private func finished() {
         guard active || starting || finishing else { return }
         resetCapture()
-        guard let url = pendingURL, FileManager.default.fileExists(atPath: url.path) else { pendingURL = nil; showError("录屏没有生成可用文件。"); return }
-        if quickForTake { name.stringValue = defaultName(); saveRecording() }
-        else { showPreview() }
+        guard let url = pendingURL, Self.hasDraft(url) else { pendingURL = nil; showError("录屏没有生成可用文件，请重新录制。"); return }
+        Task {
+            let asset = AVURLAsset(url: url)
+            let playable = (try? await asset.load(.isPlayable)) == true
+            let seconds = (try? await asset.load(.duration).seconds) ?? 0
+            guard pendingURL == url else { return }
+            guard playable, seconds.isFinite, seconds > 0 else {
+                pendingURL = nil
+                showError("录屏文件无法播放，可重新录制。原文件保留在「打开录屏暂存」中。")
+                ToolWindowPresenter.show(panel); return
+            }
+            if quickForTake { name.stringValue = defaultName(); saveRecording() }
+            else { showPreview() }
+        }
     }
     private func resetCapture() {
         timer?.invalidate(); timer = nil; active = false; starting = false; finishing = false
@@ -233,11 +249,13 @@ private final class RecordingRegionView: NSView {
         if preview == nil {
             let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 720, height: 520), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             p.title = "录屏预览 · 命名后存入中转站"; p.isReleasedWhenClosed = false; p.delegate = self; p.minSize = NSSize(width: 560, height: 420)
+            p.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
             name.placeholderString = "素材名称"; save.target = self; save.action = #selector(saveRecording)
-            let hint = NSTextField(wrappingLabelWithString: "关闭预览会保留暂存文件，再次打开录屏可继续保存。")
+            let next = NSButton(title: "保留暂存，录下一段", target: self, action: #selector(recordNext))
+            let hint = NSTextField(wrappingLabelWithString: "关闭预览会保留暂存；也可以保留当前片段，继续录下一段。")
             hint.textColor = .secondaryLabelColor; hint.font = .systemFont(ofSize: 12)
             let row = NSStackView(views: [name, save]); row.spacing = 12
-            let stack = NSStackView(views: [player, row, hint]); stack.orientation = .vertical; stack.spacing = 14
+            let stack = NSStackView(views: [player, row, next, hint]); stack.orientation = .vertical; stack.spacing = 14
             stack.translatesAutoresizingMaskIntoConstraints = false; p.contentView!.addSubview(stack)
             NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: p.contentView!.leadingAnchor, constant: 20), stack.trailingAnchor.constraint(equalTo: p.contentView!.trailingAnchor, constant: -20), stack.topAnchor.constraint(equalTo: p.contentView!.topAnchor, constant: 20), stack.bottomAnchor.constraint(equalTo: p.contentView!.bottomAnchor, constant: -20), player.widthAnchor.constraint(equalTo: stack.widthAnchor), player.heightAnchor.constraint(greaterThanOrEqualToConstant: 280), row.widthAnchor.constraint(equalTo: stack.widthAnchor), hint.widthAnchor.constraint(equalTo: stack.widthAnchor)])
             ProductTheme.apply(to: p); p.center(); preview = p
@@ -248,6 +266,7 @@ private final class RecordingRegionView: NSView {
     }
     @objc private func saveRecording() {
         guard let source = pendingURL else { return }
+        guard Self.hasDraft(source) else { recordNext(); status.stringValue = "暂存文件已被移走，可以开始新的录制。"; return }
         let cleaned = name.stringValue.components(separatedBy: CharacterSet(charactersIn: "/:\n\r\0")).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { showError("请填写素材名称。"); return }
         save.isEnabled = false
@@ -266,6 +285,16 @@ private final class RecordingRegionView: NSView {
                 DispatchQueue.main.async { self.save.isEnabled = true; self.showError("保存失败，暂存文件仍在：\(error.localizedDescription)") }
             }
         }
+    }
+    @objc private func recordNext() {
+        guard !isCapturing else { return }
+        player.player?.pause(); player.player = nil; preview?.orderOut(nil); pendingURL = nil
+        status.stringValue = "上一段仍保留在录屏暂存，可以开始下一段。"
+        show()
+    }
+    private static func hasDraft(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]) else { return false }
+        return values.isRegularFile == true && (values.fileSize ?? 0) > 0
     }
     private func showError(_ message: String) {
         status.stringValue = message

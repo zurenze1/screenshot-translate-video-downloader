@@ -4,40 +4,6 @@ import Vision
 import ImageIO
 import QuickLookThumbnailing
 
-// MARK: - 自动收集系统截图（⌘⇧3 / ⌘⇧4 / ⌘⇧5）
-
-final class ScreenshotWatcher: NSObject {
-    private let query = NSMetadataQuery()
-    private var seen = Set<String>()
-    private let startedAt = Date()
-
-    func start() {
-        let loc = UserDefaults(suiteName: "com.apple.screencapture")?.string(forKey: "location")
-            .map { ($0 as NSString).expandingTildeInPath } ?? (NSHomeDirectory() + "/Desktop")
-        query.predicate = NSPredicate(format: "kMDItemIsScreenCapture == 1")
-        query.searchScopes = [URL(fileURLWithPath: loc, isDirectory: true)]
-        NotificationCenter.default.addObserver(self, selector: #selector(update), name: .NSMetadataQueryDidFinishGathering, object: query)
-        NotificationCenter.default.addObserver(self, selector: #selector(update), name: .NSMetadataQueryDidUpdate, object: query)
-        query.start()
-    }
-
-    @objc private func update(_ n: Notification) {
-        query.disableUpdates()
-        defer { query.enableUpdates() }
-        for i in 0..<query.resultCount {
-            guard let item = query.result(at: i) as? NSMetadataItem,
-                  let path = item.value(forAttribute: NSMetadataItemPathKey) as? String,
-                  !seen.contains(path) else { continue }
-            seen.insert(path)
-            let created = item.value(forAttribute: NSMetadataItemFSCreationDateKey) as? Date ?? .distantPast
-            // 只收软件启动之后的新截图
-            if created > startedAt.addingTimeInterval(-2) {
-                ShelfStore.shared.importFiles([URL(fileURLWithPath: path)]) { _, _ in }
-            }
-        }
-    }
-}
-
 // MARK: - 缩略图
 
 enum ThumbCache {
@@ -410,7 +376,7 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate, NSSea
 
     // MARK: 显示
 
-    func toggle() { panel.isVisible ? panel.close() : show() }
+    func toggle() { panel.isVisible && panel.isKeyWindow ? panel.close() : show() }
 
     func show() {
         if !panel.isVisible {
@@ -424,9 +390,9 @@ final class ShelfController: NSObject, NSDraggingSource, NSWindowDelegate, NSSea
                 panel.setFrameOrigin(NSPoint(x: x, y: y))
             } else { panel.center() }
         }
+        ShelfStore.shared.reload()
         reloadCells()
-        panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(grid)
+        ToolWindowPresenter.show(panel, focus: grid)
     }
 
     private func reloadCells() {
