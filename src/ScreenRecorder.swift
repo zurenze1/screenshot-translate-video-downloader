@@ -141,7 +141,7 @@ private final class RecordingRegionView: NSView {
     @objc private func startOrStop() {
         if active { stopRecording(); return }
         guard !starting, !finishing, pendingURL == nil else { return }
-        starting = true; controlsEnabled(false); start.isEnabled = false; status.stringValue = "正在准备录屏权限与设备…"
+        starting = true; controlsEnabled(false); setStartButton("正在准备…", enabled: false); status.stringValue = "正在准备录屏权限与设备…"
         Task { await beginRecording() }
     }
     private func beginRecording() async {
@@ -178,13 +178,18 @@ private final class RecordingRegionView: NSView {
             try await capture.startCapture()
         } catch {
             stream = nil; recording = nil; pendingURL = nil; starting = false; active = false; finishing = false
-            controlsEnabled(true); start.isEnabled = true; start.title = "开始录制"; showError(error.localizedDescription)
+            controlsEnabled(true); setStartButton("开始录制", enabled: true); showError(error.localizedDescription)
         }
     }
     private func microphonePermission() async -> Bool { await AVCaptureDevice.requestAccess(for: .audio) }
     private func controlsEnabled(_ enabled: Bool) { [displays, choose, full, systemAudio, microphone, quick].forEach { $0.isEnabled = enabled } }
+    private func setStartButton(_ title: String, enabled: Bool) {
+        start.title = title; start.isEnabled = enabled
+        // AppKit can replace the custom title color when title changes.
+        ProductTheme.styleButton(start)
+    }
     private func stopRecording() {
-        guard active, !finishing else { return }; finishing = true; start.isEnabled = false
+        guard active, !finishing else { return }; finishing = true; setStartButton("正在保存…", enabled: false)
         status.stringValue = "正在写入 MP4，请稍候…"; timer?.invalidate(); timer = nil
         Task {
             do { try await stream?.stopCapture() }
@@ -194,7 +199,7 @@ private final class RecordingRegionView: NSView {
     nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }; self.starting = false; self.active = true
-            self.start.title = "停止录制"; self.start.isEnabled = true
+            self.setStartButton("停止录制", enabled: true)
             self.status.stringValue = "● 正在录制 00:00 · 停止后写入 MP4"
             self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 DispatchQueue.main.async {
@@ -233,7 +238,7 @@ private final class RecordingRegionView: NSView {
     }
     private func resetCapture() {
         timer?.invalidate(); timer = nil; active = false; starting = false; finishing = false
-        stream = nil; recording = nil; controlsEnabled(true); start.isEnabled = true; start.title = "开始录制"
+        stream = nil; recording = nil; controlsEnabled(true); setStartButton("开始录制", enabled: true)
     }
     private func recordingFailed(_ message: String) {
         guard active || starting || finishing else { return }
